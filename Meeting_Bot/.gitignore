@@ -1,0 +1,43 @@
+# ---- secrets and per-person credentials -------------------------------------
+# Never commit these. Every collaborator generates their own.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+client_secret*.json
+service-account*.json
+
+# The signed-in Google browser profile. This IS the account -- anyone with
+# this folder is logged in as you. See SECURITY.md.
+creds/
+
+# ---- generated output --------------------------------------------------------
+data/
+transcripts/
+notes.txt
+*.log
+debug/
+*.png.tmp
+
+# ---- python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- node / extension tooling (if it ever appears) ----------------------------
+node_modules/
+
+# ---- editors and OS ------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

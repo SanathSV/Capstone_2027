@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Meet Notetaker Bot",
+  "version": "1.0.0",
+  "description": "Send the current Google Meet to your transcription bot container and watch the transcript live.",
+  "permissions": ["activeTab", "storage", "tabs"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "Send this Meet to the bot",
+    "default_popup": "popup.html"
+  },
+  "icons": {},
+  "options_page": "options.html"
+}

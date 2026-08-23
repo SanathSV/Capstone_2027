@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+    width: 340px; margin: 0; padding: 14px;
+    background: #fff; color: #1f1f1f;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1f1f1f; color: #e8eaed; }
+    .box { background: #2a2a2a !important; border-color: #444 !important; }
+    input { background: #2a2a2a; color: #e8eaed; border-color: #555; }
+  }
+  h1 { font-size: 14px; margin: 0 0 10px; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  label { flex: 0 0 74px; color: #666; }
+  input { flex: 1; padding: 5px 7px; border: 1px solid #ccc; border-radius: 5px; font: inherit; }
+  button {
+    width: 100%; padding: 8px; border: 0; border-radius: 6px;
+    background: #1a73e8; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { background: #9aa0a6; cursor: not-allowed; }
+  button.secondary { background: #5f6368; margin-top: 6px; }
+  .box {
+    margin-top: 10px; padding: 8px; border: 1px solid #e0e0e0;
+    border-radius: 6px; background: #fafafa; font-size: 12px;
+    max-height: 190px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .muted { color: #777; }
+  .astra {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px; padding: 8px 10px; border-radius: 6px;
+    background: #f1f3f4; font-weight: 600; font-size: 12px;
+  }
+  @media (prefers-color-scheme: dark) { .astra { background: #303134; } }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #9aa0a6; flex: 0 0 auto; }
+  .dot.awake { background: #1a73e8; animation: pulse 1.1s ease-in-out infinite; }
+  .dot.think { background: #f9ab00; animation: pulse 0.7s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+  .small { font-size: 11px; max-height: 90px; }
+  .err { color: #d93025; }
+  .ok { color: #188038; }
+</style>
+</head>
+<body>
+  <h1>Meet Notetaker Bot</h1>
+
+  <div class="row">
+    <label for="server">Server</label>
+    <input id="server" placeholder="http://localhost:8080">
+  </div>
+  <div class="row">
+    <label for="key">API key</label>
+    <input id="key" type="password" placeholder="required if server has one">
+  </div>
+  <div class="row">
+    <label for="name">Bot name</label>
+    <input id="name" placeholder="Meeting Notetaker">
+  </div>
+
+  <button id="send">Send this meeting to the bot</button>
+  <button id="leave" class="secondary" style="display:none">Make the bot leave</button>
+
+  <div id="astra" class="astra">
+    <span id="astra-dot" class="dot"></span>
+    <span id="astra-label">Astra: not running</span>
+  </div>
+  <div id="astra-detail" class="box small" style="display:none"></div>
+
+  <div id="status" class="box muted">Checking…</div>
+  <div id="transcript" class="box" style="display:none"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

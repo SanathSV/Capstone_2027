@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+creds/
+data/
+tests/
+extension/
+.git/
+*.md
+notes.txt
+.env
+.env.*

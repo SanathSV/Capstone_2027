@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fake Meet</title>
+<style>
+  body { font-family: sans-serif; background: #202124; color: #e8eaed; }
+  /* Reproduces Meet's auto-hiding control bar: the button IS in the DOM and
+     clickable by JS, but Playwright considers it not visible -- which is
+     exactly what made the original click_first_visible() time out silently. */
+  #toolbar { position: fixed; bottom: 0; left: 0; right: 0; height: 60px;
+             visibility: hidden; opacity: 0; }
+  #capregion { position: fixed; bottom: 80px; left: 40px; right: 40px; }
+  .nMcdL { margin: 8px 0; }
+  .zs7s8d { font-weight: bold; font-size: 12px; color: #9aa0a6; }
+</style>
+</head>
+<body>
+<h2>Fake Meet page (join + caption test rig)</h2>
+
+<!-- ---------- green room ---------- -->
+<div id="greenroom">
+  <input aria-label="Your name" placeholder="Your name">
+  <!-- Mic responds to Ctrl+D; camera deliberately IGNORES Ctrl+E so the
+       click-the-button fallback path gets exercised too. -->
+  <button id="mic" aria-label="Turn off microphone" data-is-muted="false">Mic</button>
+  <button id="cam" aria-label="Turn off camera" data-is-muted="false">Cam</button>
+  <button id="join"><span>Join now</span></button>
+</div>
+
+<!-- ---------- in call ---------- -->
+<div id="incall" style="display:none">
+  <button id="leave" aria-label="Leave call">Leave call</button>
+  <!-- Participant counter. Starts at 2, drops to 1 shortly after joining, so
+       the "everyone left -- hang up" path can be tested. -->
+  <button id="people" aria-label="Show everyone">2</button>
+  <div id="toolbar">
+    <!-- The real toggle, surrounded by the decoys that a plain
+         [aria-label*="caption"] + .first would wrongly match. -->
+    <button id="cc" aria-label="Turn on captions">CC</button>
+    <button aria-label="Captions settings">Settings</button>
+    <button aria-label="Caption language">Language</button>
+    <button aria-label="More options">More</button>
+  </div>
+  <!-- Same shape as Meet: jsname="dsyhDe" region, jsname="tgaKEf" text nodes,
+       .zs7s8d speaker names, avatar img[alt]. -->
+  <div id="capregion" jsname="dsyhDe" style="display:none"></div>
+
+  <!-- Chat panel, opened by the "Chat with everyone" button like the real one. -->
+  <button id="chatbtn" aria-label="Chat with everyone">Chat</button>
+  <div id="chatpanel" style="display:none">
+    <ul id="chatlog"></ul>
+    <textarea id="chatbox" aria-label="Send a message"></textarea>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  window.__ccClicks = 0;
+
+  function setMuted(btn, muted, noun) {
+    btn.setAttribute('data-is-muted', muted ? 'true' : 'false');
+    btn.setAttribute('aria-label', (muted ? 'Turn on ' : 'Turn off ') + noun);
+  }
+
+  // Ctrl+D mutes the mic, like Meet. Ctrl+E is intentionally NOT handled.
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) {
+      setMuted($('mic'), true, 'microphone');
+      e.preventDefault();
+    }
+  });
+  $('mic').addEventListener('click', () => setMuted($('mic'), true, 'microphone'));
+  $('cam').addEventListener('click', () => setMuted($('cam'), true, 'camera'));
+
+  $('join').addEventListener('click', () => {
+    $('greenroom').style.display = 'none';
+    $('incall').style.display = 'block';
+    // The other participant leaves, so the bot ends up alone.
+    setTimeout(() => { $('people').textContent = '1'; }, 4000);
+  });
+
+  $('leave').addEventListener('click', () => {
+    $('incall').style.display = 'none';
+    document.body.insertAdjacentHTML('beforeend', '<p>You have left the meeting</p>');
+  });
+
+  function addBlock(speaker) {
+    const wrap = document.createElement('div');
+    wrap.className = 'nMcdL';
+    wrap.innerHTML =
+      '<div class="adE6rb"><img alt="' + speaker + '">' +
+      '<div class="zs7s8d">' + speaker + '</div></div>' +
+      '<div jsname="tgaKEf"><span></span></div>';
+    $('capregion').appendChild(wrap);
+    return wrap.querySelector('[jsname="tgaKEf"] span');
+  }
+
+  function runCaptionScript() {
+    $('capregion').style.display = 'block';
+    let alice, bob;
+    // Start late enough that the observer is installed first, so the
+    // grows-in-place de-duplication is genuinely exercised.
+    setTimeout(() => { alice = addBlock('Alice Chen'); alice.textContent = 'So I'; }, 2500);
+    setTimeout(() => { alice.textContent = 'So I think'; }, 2800);
+    setTimeout(() => { alice.textContent = 'So I think we should ship it'; }, 3100);
+    // ... quiet, so it flushes as one line ...
+    setTimeout(() => { alice.textContent = 'So I think we should ship it on Friday'; }, 4500);
+    setTimeout(() => { bob = addBlock('Bob Ortiz'); bob.textContent = 'Agreed'; }, 6000);
+    setTimeout(() => { bob.textContent = "Agreed, let's do it"; }, 6300);
+  }
+
+  $('chatbtn').addEventListener('click', () => {
+    $('chatpanel').style.display = 'block';
+  });
+
+  // Enter sends, exactly as Meet does.
+  $('chatbox').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const text = $('chatbox').value.trim();
+      if (!text) return;
+      const li = document.createElement('li');
+      li.textContent = text;
+      $('chatlog').appendChild(li);
+      $('chatbox').value = '';
+      window.__sentChat = (window.__sentChat || []).concat([text]);
+    }
+  });
+
+  $('cc').addEventListener('click', () => {
+    if ($('cc').getAttribute('aria-label') === 'Turn on captions') {
+      $('cc').setAttribute('aria-label', 'Turn off captions');
+      window.__ccClicks++;
+      runCaptionScript();
+    }
+  });
+</script>
+</body>
+</html>
