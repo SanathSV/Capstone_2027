@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 import psutil
 
 # Core Drift Engine Import
-from drift_engine import calculate_cdi
+from components.drift_engine import calculate_cdi
 
 SYSTEM = platform.system()
 if SYSTEM == "Windows":

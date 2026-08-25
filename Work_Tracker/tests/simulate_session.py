@@ -11,13 +11,19 @@ Simulates a full 2-hour software engineering work session:
 
 import os
 import sqlite3
+import sys
 import urllib.request
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Import local drift calculation engine
-from drift_engine import calculate_cdi
-import agent
+from components.drift_engine import calculate_cdi
+import components.agent as agent
 
 LOCAL_DB = "local_tracker.db"
 
