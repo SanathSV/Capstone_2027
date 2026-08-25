@@ -19,6 +19,9 @@ from urllib.parse import urlparse
 
 import psutil
 
+# Core Drift Engine Import
+from drift_engine import calculate_cdi
+
 SYSTEM = platform.system()
 if SYSTEM == "Windows":
     import win32api
@@ -112,7 +115,7 @@ def browser_domain(app_name):
 
 
 def git_commits(session_id):
-    """Capture only recent commit ids, subjects, and line churn; no source files."""
+    """Capture recent commit IDs, subjects, and line churn."""
     try:
         output = subprocess.run(
             ["git", "log", "--since=24.hours", "--pretty=format:%H%x1f%s%x1f%aI", "--numstat"],
@@ -157,6 +160,7 @@ def classify(task, process, title, domain, model):
 
 
 def build_payload():
+    """Builds sanitized daily report payload with Composite Drift Index (CDI) calculation."""
     with connect_db() as db:
         sessions = db.execute("SELECT * FROM sessions WHERE synced=0 ORDER BY id").fetchall()
         reports = []
@@ -164,15 +168,33 @@ def build_payload():
             rows = db.execute("SELECT * FROM activity_log WHERE session_id=?", (session["id"],)).fetchall()
             commits = db.execute("SELECT commit_hash,message,additions,deletions FROM git_commits WHERE session_id=?",
                                  (session["id"],)).fetchall()
+            
+            activity_list = [dict(r) for r in rows]
+            commit_list = [dict(c) for c in commits]
+
+            # Compute CDI metrics via drift_engine
+            cdi_results = calculate_cdi(activity_list, commit_list)
+
             active = sum(not row["idle"] for row in rows) * POLL_SECONDS / 3600
             idle = sum(bool(row["idle"]) for row in rows) * POLL_SECONDS / 3600
-            reports.append({"session_id": session["id"], "project_id": session["project_id"],
-                "task": session["task"][:500], "started_at": session["started_at"], "ended_at": session["ended_at"],
-                "active_man_hours": round(active, 4), "idle_hours": round(idle, 4),
+
+            reports.append({
+                "session_id": session["id"],
+                "project_id": session["project_id"],
+                "task": session["task"][:500],
+                "started_at": session["started_at"],
+                "ended_at": session["ended_at"],
+                "active_man_hours": round(active, 4),
+                "idle_hours": round(idle, 4),
+                "cdi_score": cdi_results["cdi_score"],
+                "alignment_score": cdi_results["alignment_score"],
+                "flow_score": cdi_results["flow_score"],
+                "context_switches": cdi_results["context_switches"],
                 "activity": [{"recorded_at": r["recorded_at"], "process": r["process_name"],
                               "window_title": r["window_title"][:300], "domain": r["domain"],
                               "status": r["status"], "reason": r["reason"][:160], "idle": bool(r["idle"])} for r in rows],
-                "commits": [dict(c) for c in commits]})
+                "commits": commit_list
+            })
     return {"employee_id": os.getenv("TRACKER_EMPLOYEE_ID", os.getenv("USER", "unknown")), "reports": reports}
 
 
@@ -237,7 +259,8 @@ class AgentApp:
         if self.session_id:
             with connect_db() as db:
                 db.execute("UPDATE sessions SET ended_at=? WHERE id=?", (dt.datetime.now(dt.timezone.utc).isoformat(), self.session_id))
-            threading.Thread(target=git_commits, args=(self.session_id,), daemon=True).start()
+            # Capture Git commits synchronously when stopping session
+            git_commits(self.session_id)
         self.status.set("Stopped. Log remains local until you submit it.")
 
     def track_loop(self):
@@ -260,4 +283,6 @@ class AgentApp:
 
 if __name__ == "__main__":
     init_db()
-    root = tk.Tk(); AgentApp(root); root.mainloop()
+    root = tk.Tk()
+    AgentApp(root)
+    root.mainloop()
