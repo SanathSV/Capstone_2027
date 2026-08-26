@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.pyre/
+.conda/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Rust / Cargo
+target/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# OS and editor files
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo

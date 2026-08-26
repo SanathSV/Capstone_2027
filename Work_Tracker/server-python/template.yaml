@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CDI Engine serverless backend with API Gateway, SQS, Lambda, and DynamoDB.
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, test, prod]
+    Description: Deployment stage.
+  ApiKeyValue:
+    Type: String
+    Default: change-me
+    NoEcho: true
+    Description: API key used by the local Rust client for telemetry sync.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        CDI_TABLE_NAME: !Ref CdiMainTable
+        TELEMETRY_QUEUE_URL: !Ref TelemetryQueue
+
+Resources:
+  TelemetryDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      QueueName: !Sub "${AWS::StackName}-CDITelemetryDlq.fifo"
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 1209600
+
+  TelemetryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      QueueName: !Sub "${AWS::StackName}-CDITelemetryQueue.fifo"
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TelemetryDlq.Arn
+        maxReceiveCount: 5
+
+  CdiMainTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-CDI_Main"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1_PK
+          AttributeType: S
+        - AttributeName: GSI1_SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1_PK
+              KeyType: HASH
+            - AttributeName: GSI1_SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl_timestamp
+        Enabled: true
+
+  IngestionWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src
+      Handler: ingestion_worker.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CdiMainTable
+        - SQSPolicy:
+            QueueName: !GetAtt TelemetryQueue.QueueName
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt TelemetryQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+
+  DashboardApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src
+      Handler: dashboard_api.app
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CdiMainTable
+        - SQSPolicy:
+            QueueName: !GetAtt TelemetryQueue.QueueName
+      Environment:
+        Variables:
+          API_KEY_VALUE: !Ref ApiKeyValue
+      Events:
+        SyncTelemetry:
+          Type: Api
+          Properties:
+            Path: /v1/telemetry/sync
+            Method: post
+        UserDashboard:
+          Type: Api
+          Properties:
+            Path: /v1/dashboard/user/{org_id}/{user_id}/{date_str}
+            Method: get
+        OrgDashboard:
+          Type: Api
+          Properties:
+            Path: /v1/dashboard/org/{org_id}/{date_str}
+            Method: get
+
+Outputs:
+  ApiEndpoint:
+    Description: Base URL for the API Gateway endpoint.
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+  CdiTableName:
+    Description: DynamoDB table used for CDI data and rollups.
+    Value: !Ref CdiMainTable
+  TelemetryQueueUrl:
+    Description: SQS FIFO queue URL for session ingestion.
+    Value: !Ref TelemetryQueue

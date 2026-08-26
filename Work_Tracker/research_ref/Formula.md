@@ -1,5 +1,36 @@
 Here is a clear breakdown of the Composite Drift Index (CDI), a privacy-first metric designed to measure developer task alignment and focus without intrusive surveillance. Instead of recording screen content, logging keystrokes, or tracking exact URLs, the CDI engine evaluates semantic intent, cognitive context switching, and verified output artifacts.
 
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LOCAL DEVELOPER LAPTOP                                                  │
+│                                                                         │
+│  1. Rust Agent (cdi-agent)  ──► Polls active OS window titles every 5s  │
+│  2. Local Categorization     ──► Maps titles & Jira keys (on_track)     │
+│  3. Local Engine Math        ──► Calculates Sa, Sf, Sd & final CDI %    │
+│  4. Local SQLite Cache       ──► Persists snapshots in local_tracker.db │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     │ 5. HTTP POST (Sanitized 1KB JSON)
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ AWS CLOUD BACKEND                                                       │
+│                                                                         │
+│  [ AWS API Gateway ]  ──► Validates request & API keys                  │
+│          │                                                              │
+│          ▼                                                              │
+│  [ AWS SQS FIFO Queue ] ──► Buffers incoming session traffic & drops    │
+│          │                  duplicate retries automatically             │
+│          ▼                                                              │
+│  [ AWS Lambda Worker ]  ──► Batches messages, converts metrics,         │
+│          │                  writes 30-day session logs & updates        │
+│          │                  permanent daily summaries                   │
+│          ▼                                                              │
+│  [ DynamoDB (CDI_Main)] ──► Single-Table schema storing user metrics    │
+│          ▲                                                              │
+│          │                                                              │
+│  [ Dashboard FastAPI ] ──► Serves high-speed team focus summaries       │
+│                            to employer dashboard UI (dashboard.html)    │
+└─────────────────────────────────────────────────────────────────────────┘
+
 ================================================================================
 HOW CDI MEASURES PRODUCTIVITY
 ================================================================================
