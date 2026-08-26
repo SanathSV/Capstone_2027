@@ -44,3 +44,13 @@ target/
 .idea/
 *.swp
 *.swo
+
+# Runtime logs
+logs/
+*.json
+
+# AWS SAM build output
+.aws-sam/
+
+# Python backend local environment
+server-python/.venv/

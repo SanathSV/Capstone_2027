@@ -9,6 +9,10 @@ pub struct ClientConfig {
     pub org_id: String,
     pub user_id: String,
     pub timeout_seconds: u64,
+    pub project_id: String,
+    pub ollama_url: String,
+    pub ollama_model: String,
+    pub log_dir: PathBuf,
 }
 
 impl Default for ClientConfig {
@@ -19,6 +23,13 @@ impl Default for ClientConfig {
             org_id: "default-org".to_string(),
             user_id: "default-user".to_string(),
             timeout_seconds: 15,
+            project_id: "work-tracker".to_string(),
+            ollama_url: "http://localhost:11434".to_string(),
+            ollama_model: "llama3.2".to_string(),
+            log_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("logs"),
         }
     }
 }
@@ -52,19 +63,32 @@ impl ClientConfig {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(default.timeout_seconds);
 
+        let project_id = env::var("CDI_PROJECT_ID").unwrap_or(default.project_id.clone());
+        let ollama_url = env::var("OLLAMA_URL").unwrap_or(default.ollama_url.clone());
+        let ollama_model = env::var("OLLAMA_MODEL").unwrap_or(default.ollama_model.clone());
+
         Self {
             api_base_url,
             api_key,
             org_id,
             user_id,
             timeout_seconds,
+            project_id,
+            ollama_url,
+            ollama_model,
+            log_dir: default.log_dir,
         }
     }
 
     pub fn from_file(path: impl AsRef<std::path::Path>) -> Result<Self, String> {
         let file_path = path.as_ref();
-        let contents = fs::read_to_string(file_path)
-            .map_err(|e| format!("Unable to read config file '{}': {}", file_path.display(), e))?;
+        let contents = fs::read_to_string(file_path).map_err(|e| {
+            format!(
+                "Unable to read config file '{}': {}",
+                file_path.display(),
+                e
+            )
+        })?;
 
         let mut config = Self::from_env_or_default();
         for line in contents.lines() {
@@ -90,6 +114,9 @@ impl ClientConfig {
                         config.timeout_seconds = parsed;
                     }
                 }
+                "CDI_PROJECT_ID" => config.project_id = value.to_string(),
+                "OLLAMA_URL" => config.ollama_url = value.to_string(),
+                "OLLAMA_MODEL" => config.ollama_model = value.to_string(),
                 _ => {}
             }
         }
@@ -98,7 +125,8 @@ impl ClientConfig {
     }
 
     pub fn config_file_path() -> PathBuf {
-        let home = dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let home = dirs::home_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         home.join(".cdi-agent.conf")
     }
 }
