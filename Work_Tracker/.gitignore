@@ -54,3 +54,6 @@ logs/
 
 # Python backend local environment
 server-python/.venv/
+
+# Runtime logs
+*.log
