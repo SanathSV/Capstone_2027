@@ -271,6 +271,36 @@ sentence arrives in pieces. Join them for prose, or render the `...` marker as
 | `MEET_CALLBACK_KEY` | *(empty)* | Sent as `X-API-Key` to the host listener. |
 | `MEET_CALLBACK_BATCH_SECONDS` | `1.0` | How often batches are flushed to the host. |
 
+### Picking the keys
+
+`MEET_API_KEY` and `MEET_CALLBACK_KEY` are **not** issued by Google or any other
+service — there is nothing to sign up for. They are shared secrets you invent,
+and every collaborator invents their own. Generate two *different* strings:
+
+```bash
+python -c "import secrets;print(secrets.token_urlsafe(32))"   # MEET_API_KEY
+python -c "import secrets;print(secrets.token_urlsafe(32))"   # MEET_CALLBACK_KEY
+```
+
+Put them in `.env` (copy `.env.example` first). `.env` is gitignored — never
+commit a real value and never paste one into this file:
+
+```
+MEET_API_KEY=<first string>
+MEET_CALLBACK_KEY=<second string>
+```
+
+The same value has to appear everywhere it is checked:
+
+| Key | Who needs the same value |
+|---|---|
+| `MEET_API_KEY` | `.env` (the container), the extension's options page, `tester.py --key` |
+| `MEET_CALLBACK_KEY` | `.env` (the container), `host_listener.py --key <value>` |
+
+A mismatch looks like a `401` from any `/api/*` route, or like the container
+logging a failed push while `host_listener.py` never writes a file. Rotating is
+just picking new strings and restarting both sides — see `SECURITY.md`.
+
 **Scaling:** one session per container is the reliable default — Chrome locks
 its user-data directory, so concurrency inside one container requires copying
 the profile per session. Prefer more replicas over a higher `MEET_MAX_SESSIONS`.

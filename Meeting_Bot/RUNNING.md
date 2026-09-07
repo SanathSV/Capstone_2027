@@ -128,7 +128,7 @@ Must show `credentials : present`. (bash: `--key "$MEET_API_KEY"`.)
 
 ### Step 5 — Send the bot in
 
-    python tester.py join "https://meet.google.com/abc-defg-hij" --key $env:MEET_API_KEY
+    python tester.py join "https://meet.google.com/xjo-ycwh-rao" --key $env:MEET_API_KEY
 
 ### Step 6 — Admit it
 
