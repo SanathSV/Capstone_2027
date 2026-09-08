@@ -1,0 +1,10 @@
+{
+  "name": "@astra/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "echo \"no linter configured yet\""
+  }
+}
