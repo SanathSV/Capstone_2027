@@ -30,8 +30,12 @@ export interface GitHubPullRequest {
   author: string;
   draft?: true;
   age_days: number;
-  /** Review state summary, e.g. "approved", "changes_requested", "pending". */
-  reviews?: string;
+  /**
+   * Roster refs whose review this PR is waiting on. Structured rather than a
+   * prose summary because the analysis counts them: three PRs pointing at the
+   * same person is a bottleneck, and that is only computable from a list.
+   */
+  reviewers?: string[];
   labels?: string[];
   url: string;
 }
@@ -116,6 +120,88 @@ export interface SlackContext {
   members_missing?: string[];
 }
 
+/**
+ * The derived layer: what the harvest MEANS.
+ *
+ * Everything here is computed from the raw sections below it, deterministically
+ * and once, so the bot spends its context on judgement rather than arithmetic.
+ */
+export interface SprintHealth {
+  /** Completion measured against elapsed time, not in isolation. */
+  verdict: "ahead" | "on_track" | "behind" | "at_risk" | "unknown";
+  /** One sentence, safe to read out loud. */
+  note: string;
+  goal?: string;
+  days_left?: number;
+  elapsed_pct?: number;
+  issues_total: number;
+  issues_done: number;
+  issues_done_pct: number;
+  points_total?: number;
+  points_done?: number;
+  points_done_pct?: number;
+}
+
+/** One row per person, shaped like the meeting: it goes around the room. */
+export interface MemberAnalytics {
+  ref: string;
+  name: string;
+  role: string;
+  commits: number;
+  branches?: string[];
+  prs_open: number;
+  prs_stale: number;
+  /** How many open PRs are waiting on THIS person to review. */
+  reviews_requested?: number;
+  issues: number;
+  in_progress: number;
+  done: number;
+  points?: number;
+  /** Short phrases worth raising about this person, if any. */
+  signals?: string[];
+}
+
+export interface Risk {
+  kind:
+    | "sprint_pace"
+    | "stale_pr"
+    | "stalled_issue"
+    | "wip_overload"
+    | "review_bottleneck"
+    | "idle_member"
+    | "claimed_but_quiet"
+    | "no_sprint_work"
+    | "config";
+  severity: "high" | "medium" | "low";
+  /** A roster ref, an issue key, or a PR number. */
+  subject?: string;
+  detail: string;
+}
+
+export interface Analysis {
+  sprint?: SprintHealth;
+  per_member: MemberAnalytics[];
+  /** Most serious first. */
+  risks: Risk[];
+  /** The agenda, in order. Sentences, meant to be read aloud. */
+  talking_points: string[];
+  totals: {
+    members: number;
+    commits: number;
+    open_prs: number;
+    stale_prs: number;
+    issues: number;
+    in_progress: number;
+  };
+  /**
+   * Whether every configured source answered.
+   *
+   * False means absences are unreliable — a missing person may simply be a
+   * source that failed — so the bot should hedge rather than assert silence.
+   */
+  complete: boolean;
+}
+
 export interface PreContextMeta {
   generated_at: string;
   duration_ms: number;
@@ -141,6 +227,11 @@ export interface PreContextPayload {
   github?: GitHubContext;
   jira?: JiraContext;
   slack?: SlackContext;
+  /**
+   * The derived layer. Read this before the raw sections: it is the same
+   * facts, already reasoned about.
+   */
+  analysis?: Analysis;
   /** A handful of pre-computed facts, so the bot does not have to derive them. */
   digest: string[];
   meta: PreContextMeta;

@@ -20,6 +20,7 @@ import {
 const NAV = [
   { href: "/dashboard", label: "Teams" },
   { href: "/directory", label: "Resource Pool" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function Shell({

@@ -1,0 +1,291 @@
+/*
+ * The popup wears the dashboard's colours so the two read as one product. The
+ * palette is copied rather than imported: an extension cannot share a Tailwind
+ * build, and six hex values are a smaller price than a toolchain.
+ */
+
+:root {
+  --ink-950: #08090c;
+  --ink-900: #0c0e13;
+  --ink-850: #11141b;
+  --ink-800: #161a23;
+  --ink-700: #1e2330;
+  --ink-600: #2a3040;
+  --astra-300: #8ab4ff;
+  --astra-400: #6b9bff;
+  --astra-500: #4f7dfb;
+  --green: #3ecf8e;
+  --amber: #f5b74e;
+  --red: #f2555a;
+  --text: #cbd5e1;
+  --muted: #64748b;
+  --dim: #475569;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  background: var(--ink-950);
+  color: var(--text);
+  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ------------------------------------------------------------------ bar -- */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ink-800);
+  background: var(--ink-900);
+}
+
+.mark {
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, var(--astra-300), #a78bfa);
+  /* The dashboard's four-point star, as a clip path. */
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+}
+
+.brand {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #fff;
+}
+
+.who {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.link:hover {
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------------- pane -- */
+.pane {
+  padding: 14px;
+}
+
+.label {
+  display: block;
+  margin: 0 0 5px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.label.mb0 {
+  margin-bottom: 0;
+}
+
+input,
+select {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink-600);
+  border-radius: 8px;
+  background: var(--ink-900);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+input:focus,
+select:focus {
+  border-color: var(--astra-500);
+  box-shadow: 0 0 0 2px rgb(79 125 251 / 0.25);
+}
+
+.btn {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms, transform 60ms;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.985);
+}
+.btn-primary {
+  background: var(--astra-500);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--astra-400);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dim);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- notes -- */
+.note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.note-error {
+  border-color: rgb(242 85 90 / 0.3);
+  background: rgb(242 85 90 / 0.1);
+  color: var(--red);
+}
+.note-warn {
+  border-color: rgb(245 183 78 / 0.3);
+  background: rgb(245 183 78 / 0.08);
+  color: var(--amber);
+}
+.note-ok {
+  border-color: rgb(62 207 142 / 0.3);
+  background: rgb(62 207 142 / 0.1);
+  color: var(--green);
+}
+.note code {
+  font-size: 10px;
+}
+
+/* ----------------------------------------------------------------- meet -- */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pill {
+  padding: 2px 8px;
+  border: 1px solid var(--ink-600);
+  border-radius: 999px;
+  background: var(--ink-800);
+  font-size: 10px;
+  color: var(--muted);
+}
+.pill.ok {
+  border-color: rgb(62 207 142 / 0.3);
+  background: rgb(62 207 142 / 0.1);
+  color: var(--green);
+}
+.pill.bad {
+  border-color: rgb(245 183 78 / 0.3);
+  background: rgb(245 183 78 / 0.1);
+  color: var(--amber);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+}
+.link-text {
+  margin: 4px 0 14px;
+  color: var(--dim);
+  word-break: break-all;
+}
+
+/* ----------------------------------------------------- readiness checks -- */
+.readiness {
+  margin: 0 0 12px;
+  border: 1px solid var(--ink-700);
+  border-radius: 8px;
+  background: rgb(12 14 19 / 0.6);
+  overflow: hidden;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+.check + .check {
+  border-top: 1px solid var(--ink-800);
+}
+
+/* State is carried by the word in .check-detail as well as this dot, so it is
+   never colour alone. */
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--dim);
+}
+.check.pending .dot {
+  background: var(--astra-500);
+  animation: pulse 1s ease-in-out infinite;
+}
+.check.ok .dot {
+  background: var(--green);
+}
+.check.bad .dot {
+  background: var(--red);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.check-label {
+  color: var(--text);
+}
+.check-detail {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: right;
+  max-width: 200px;
+}
+.check.bad .check-detail {
+  color: var(--red);
+}
+.check.ok .check-detail {
+  color: var(--green);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check.pending .dot {
+    animation: none;
+  }
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}

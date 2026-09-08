@@ -1,32 +1,25 @@
-import { ApiError, assertUuid, dbError, json, requireTeamLeader, route } from "@/lib/api";
-import {
-  createSupabaseAdminClient,
-  createSupabaseServerClient,
-} from "@/lib/supabase/server";
-import { decryptSecret } from "@/lib/crypto";
-import { generatePreContext } from "@/lib/context/aggregate";
-import type {
-  Team,
-  TeamIntegrations,
-  TeamIntegrationsPlain,
-  TeamMemberWithEmployee,
-} from "@/lib/db/types";
+import { assertUuid, json, route } from "@/lib/api";
+import { requireCaller } from "@/lib/apiAuth";
+import { buildPreContext } from "@/lib/preContextService";
 
 /**
  * POST /api/teams/:id/pre-context — the "Generate Pre-Context" button.
  *
- * Sequence:
- *   1. Prove the caller leads this team, using their own session (RLS).
- *   2. Read the roster with that same session.
- *   3. Read + decrypt the credentials with the service role. This is the only
- *      place that key is used, and it happens strictly after step 1.
- *   4. Fan out to GitHub / Jira / Slack, compact, and return one JSON payload.
- *   5. Log the run, and console.log the payload so it is visible in the server
- *      terminal exactly as the spec asks.
+ * Always generates. The dashboard's button means "go and look right now", so
+ * there is no cache to consult; `GET .../precontext` is the one that settles
+ * for a recent run when the caller wants an answer immediately.
  *
- * The payload is the artefact: it goes into the bot container's ConfigMap or
- * env file at launch. Nothing is cached between clicks — sprint state moves,
- * and a stale payload is worse than a slow one.
+ * Everything it does lives in `buildPreContext()`, shared with that GET so the
+ * two can never drift into producing different payloads:
+ *
+ *   1. Prove the caller leads this team (RLS, with their own session).
+ *   2. Read the roster with that same session.
+ *   3. Read + decrypt the credentials with the service role, strictly after 1.
+ *   4. Fan out to GitHub / Jira / Slack, analyse, compact.
+ *   5. Log the run, and console.log the payload for the terminal.
+ *
+ * Nothing is cached between clicks: sprint state moves, and a stale payload is
+ * worse than a slow one.
  */
 
 export const dynamic = "force-dynamic";
@@ -38,122 +31,30 @@ interface Params {
   params: { id: string };
 }
 
-export async function POST(_request: Request, { params }: Params) {
+export async function POST(request: Request, { params }: Params) {
   return route(async () => {
     const teamId = assertUuid(params.id, "Team id");
-    const user = await requireTeamLeader(teamId);
+    const { user, supabase } = await requireCaller(request);
 
-    const supabase = createSupabaseServerClient();
-
-    const [{ data: teamRow }, { data: memberRows, error: memberError }] =
-      await Promise.all([
-        supabase.from("teams").select("*").eq("id", teamId).single(),
-        supabase
-          .from("team_members")
-          .select(`*, employee:employees ( * )`)
-          .eq("team_id", teamId)
-          .order("is_lead", { ascending: false }),
-      ]);
-
-    const rosterProblem = dbError("read the roster", "authenticated", memberError);
-    if (rosterProblem) throw rosterProblem;
-    const team = teamRow as Team;
-    const members = (memberRows ?? []) as unknown as TeamMemberWithEmployee[];
-
-    if (members.length === 0) {
-      throw new ApiError(
-        400,
-        "This team has no members yet. Add people from the resource pool first — the roster is what every other lookup is filtered by.",
-      );
-    }
-
-    // Leadership is already proven, so the service role is safe here. It is
-    // needed because RLS on team_integrations is leader-only *and* we want this
-    // read to work identically if a future scheduler triggers it.
-    const admin = createSupabaseAdminClient();
-    const { data: intRow, error: intError } = await admin
-      .from("team_integrations")
-      .select("*")
-      .eq("team_id", teamId)
-      .maybeSingle();
-
-    // The most likely failure in a fresh project: service_role was never
-    // granted anything, and this is the only route that uses it.
-    const credsProblem = dbError("read team_integrations", "service_role", intError);
-    if (credsProblem) throw credsProblem;
-    const stored = (intRow as TeamIntegrations | null) ?? null;
-
-    let credentials: TeamIntegrationsPlain;
-    try {
-      credentials = {
-        slackBotToken: decryptSecret(stored?.slack_bot_token),
-        slackChannelId: stored?.slack_channel_id ?? null,
-        githubToken: decryptSecret(stored?.github_token),
-        githubRepoUrl: stored?.github_repo_url ?? null,
-        jiraBaseUrl: stored?.jira_base_url ?? null,
-        jiraProjectKey: stored?.jira_project_key ?? null,
-        jiraEmail: stored?.jira_email ?? null,
-        jiraApiToken: decryptSecret(stored?.jira_api_token),
-      };
-    } catch (error) {
-      // A key mismatch is a configuration problem, not a transient one — say so
-      // rather than reporting three "integration not configured" lines.
-      throw new ApiError(500, (error as Error).message);
-    }
-
-    const { data: leaderProfile } = await supabase
-      .from("profiles")
-      .select("full_name, email")
-      .eq("id", team.leader_id)
-      .maybeSingle();
-
-    const { payload, status, sources } = await generatePreContext({
-      team,
-      leaderName: leaderProfile?.full_name ?? leaderProfile?.email ?? null,
-      members,
-      integrations: credentials,
+    const { payload, markdown, status, runId } = await buildPreContext({
+      teamId,
+      userId: user.id,
+      supabase,
+      log: true,
     });
-
-    // Spec: print the payload. This is what you copy out of the terminal into
-    // the bot's ConfigMap while the launch pipeline is still being built.
-    console.log(
-      `\n=== ASTRA PRE-CONTEXT — ${team.name} (${teamId}) ===\n` +
-        JSON.stringify(payload, null, 2) +
-        `\n=== ${payload.meta.bytes} bytes, ~${payload.meta.token_estimate} tokens, ` +
-        `${payload.meta.duration_ms}ms, status=${status} ===\n`,
-    );
-
-    // Audit row. Written with the service role so a partial run is still
-    // recorded even if the leader's token expires mid-request.
-    const failure = Object.entries(sources).find(([, s]) => !s.ok);
-    const { data: run, error: runError } = await admin
-      .from("pre_context_runs")
-      .insert({
-        team_id: teamId,
-        generated_by: user.id,
-        status,
-        payload,
-        sources,
-        error: failure ? `${failure[0]}: ${failure[1].error}` : null,
-        token_estimate: payload.meta.token_estimate,
-        duration_ms: payload.meta.duration_ms,
-      })
-      .select("id, created_at")
-      .single();
-
-    // The payload is the product; failing to log it must not fail the request.
-    if (runError) {
-      console.error(
-        "[astra:precontext] could not log the run (the payload above is still valid):",
-        runError.message,
-      );
-    }
 
     return json({
       status,
-      run_id: run?.id ?? null,
+      run_id: runId,
       generated_at: payload.meta.generated_at,
+      // Both: the panel renders its analysis from the structured form, and
+      // shows the markdown because that is the artefact the bot receives.
       payload,
+      markdown,
+      token_estimate: {
+        markdown: Math.ceil(markdown.length / 4),
+        json: payload.meta.token_estimate,
+      },
     });
   });
 }

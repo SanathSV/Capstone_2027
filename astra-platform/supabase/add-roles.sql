@@ -154,3 +154,14 @@ select email, role, created_at from public.profiles order by role, email;
 
 --   update public.profiles set role = 'admin' where lower(email) = 'someone@company.com';
 --   update public.profiles set role = 'user'  where lower(email) = 'someone@company.com';
+
+-- ---------------------------------------------------------------------------
+-- Tell PostgREST about the new tables
+-- ---------------------------------------------------------------------------
+-- PostgREST caches the schema and does not notice a CREATE TABLE on its own.
+-- Until it reloads, every request for a new table fails with
+--   PGRST205: Could not find the table 'public.x' in the schema cache
+-- which looks exactly like the migration never ran. This makes the migration
+-- self-sufficient; the dashboard button (Settings -> API -> Reload schema
+-- cache) does the same thing.
+notify pgrst, 'reload schema';

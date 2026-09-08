@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PreContextRun, SourceOutcome } from "@/lib/db/types";
+import type { Analysis } from "@/lib/context/types";
+import { AnalysisView } from "./AnalysisView";
 
 /**
  * The "Generate Pre-Context" button and its result.
@@ -17,6 +19,8 @@ interface RunResponse {
   status: "success" | "partial" | "failed";
   run_id: string | null;
   generated_at: string;
+  markdown?: string;
+  token_estimate?: { markdown: number; json: number };
   payload: {
     // Optional on purpose. Runs generated before meta was exempted from
     // pruning have no `truncated` key at all, and those payloads are still in
@@ -30,6 +34,8 @@ interface RunResponse {
       truncated?: string[];
     };
     digest?: string[];
+    /** The derived layer. Absent on runs generated before it existed. */
+    analysis?: Analysis;
     [key: string]: unknown;
   };
 }
@@ -54,6 +60,8 @@ export function PreContextPanel({
   const [result, setResult] = useState<RunResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  // Markdown is what ships; JSON is there for anyone debugging the harvest.
+  const [view, setView] = useState<"markdown" | "json">("markdown");
   const [copied, setCopied] = useState(false);
   // A harvest hits three third-party APIs with retries and can legitimately
   // take ten seconds. Without a running clock that is indistinguishable from a
@@ -95,27 +103,34 @@ export function PreContextPanel({
   }
 
   const payloadJson = result ? JSON.stringify(result.payload, null, 2) : "";
+  const payloadMarkdown = result?.markdown ?? "";
+  const shown = view === "markdown" && payloadMarkdown ? payloadMarkdown : payloadJson;
 
   // One place where the payload's optional shape is normalised, so the JSX
   // below can read these without a guard on every line.
   const meta = result?.payload.meta;
   const digest = result?.payload.digest ?? [];
+  const analysis = result?.payload.analysis ?? null;
   const trimmed = meta?.truncated ?? [];
   const sources = meta?.sources ?? {};
 
   async function copy() {
-    await navigator.clipboard.writeText(payloadJson);
+    await navigator.clipboard.writeText(shown);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   function download() {
-    const blob = new Blob([payloadJson], { type: "application/json" });
+    const isMd = view === "markdown" && Boolean(payloadMarkdown);
+    const blob = new Blob([shown], {
+      type: isMd ? "text/markdown" : "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     // The name the bot's entrypoint expects to find mounted.
-    anchor.download = `precontext-${teamName.toLowerCase().replace(/\W+/g, "-")}.json`;
+    anchor.download =
+      `precontext-${teamName.toLowerCase().replace(/\W+/g, "-")}.` + (isMd ? "md" : "json");
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -180,7 +195,22 @@ export function PreContextPanel({
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={result.status} />
               <Stat label="size" value={`${((meta?.bytes ?? 0) / 1024).toFixed(1)} KB`} />
-              <Stat label="≈tokens" value={(meta?.token_estimate ?? 0).toLocaleString()} />
+              <Stat
+                label="≈tokens"
+                value={
+                  result.token_estimate
+                    ? `${result.token_estimate.markdown.toLocaleString()} md`
+                    : (meta?.token_estimate ?? 0).toLocaleString()
+                }
+              />
+              {result.token_estimate && (
+                <Stat
+                  label="saved"
+                  value={`${Math.round(
+                    (1 - result.token_estimate.markdown / result.token_estimate.json) * 100,
+                  )}% vs JSON`}
+                />
+              )}
               <Stat label="took" value={`${meta?.duration_ms ?? 0} ms`} />
               <div className="ml-auto flex gap-2">
                 <button onClick={copy} className="btn-ghost px-3 py-1.5 text-xs">
@@ -194,10 +224,12 @@ export function PreContextPanel({
 
             {Object.keys(sources).length > 0 && <SourceGrid sources={sources} />}
 
+            {analysis && <AnalysisView analysis={analysis} />}
+
             {digest.length > 0 && (
               <div className="rounded-lg border border-ink-700 bg-ink-900/60 p-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Digest
+                  Digest{analysis ? " (headline facts)" : ""}
                 </h3>
                 <ul className="space-y-1.5">
                   {digest.map((line, i) => (
@@ -226,22 +258,43 @@ export function PreContextPanel({
             )}
 
             <div>
-              <button
-                onClick={() => setShowRaw((v) => !v)}
-                className="mb-2 text-xs text-astra-400 hover:text-astra-300"
-              >
-                {showRaw ? "Hide" : "Show"} the payload
-              </button>
+              <div className="mb-2 flex items-center gap-3">
+                <button
+                  onClick={() => setShowRaw((v) => !v)}
+                  className="text-xs text-astra-400 hover:text-astra-300"
+                >
+                  {showRaw ? "Hide" : "Show"} the payload
+                </button>
+                {showRaw && payloadMarkdown && (
+                  <div className="flex rounded-md border border-ink-700 bg-ink-900 p-0.5 text-[10px]">
+                    {(["markdown", "json"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setView(mode)}
+                        className={`rounded px-2 py-0.5 transition ${
+                          view === mode
+                            ? "bg-ink-700 text-white"
+                            : "text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        {mode === "markdown" ? "Markdown (sent)" : "JSON (source)"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {showRaw && (
-                <pre className="mono max-h-[420px] overflow-auto rounded-lg border border-ink-700 bg-ink-950 p-4 text-slate-300">
-                  {payloadJson}
+                <pre className="mono max-h-[420px] overflow-auto whitespace-pre-wrap rounded-lg border border-ink-700 bg-ink-950 p-4 text-slate-300">
+                  {shown}
                 </pre>
               )}
             </div>
 
             <p className="text-[11px] text-slate-600">
-              The same payload was printed to the Next.js server terminal, and stored on
-              this team&rsquo;s run history.
+              The bot is briefed with the <strong className="text-slate-400">Markdown</strong>,
+              not the JSON &mdash; roughly half the tokens for the same facts. The
+              structured form is what the analysis above is computed from, and what is
+              stored in this team&rsquo;s run history.
             </p>
           </div>
         )}

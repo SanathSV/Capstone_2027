@@ -3,15 +3,18 @@ import { ProgressLink } from "@/components/Navigation";
 import { RosterEditor } from "@/components/RosterEditor";
 import { IntegrationsForm } from "@/components/IntegrationsForm";
 import { PreContextPanel, StatusBadge } from "@/components/PreContextPanel";
+import { BotStatusBadge, type BadgeStatus } from "@/components/BotStatusBadge";
 import {
   getEmployees,
+  getLeaderBotStatus,
   getIntegrationsView,
   getRecentPreContextRuns,
   getTeam,
   getTeamLeaderName,
   getTeamMembers,
 } from "@/lib/db/queries";
-import { getSessionUser } from "@/lib/supabase/server";
+import { createSupabaseServerClient, getSessionUser } from "@/lib/supabase/server";
+import { publishBotStatus } from "@/lib/botStatusPublish";
 
 /**
  * Team detail: roster, credentials, and the pre-context engine.
@@ -32,12 +35,41 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
   const isLeader = team.leader_id === user.id;
 
-  const [members, directory, leaderName, runs] = await Promise.all([
+  const [members, directory, leaderName, runs, botStatus] = await Promise.all([
     getTeamMembers(team.id),
     isLeader ? getEmployees() : Promise.resolve([]),
     getTeamLeaderName(team.leader_id),
     getRecentPreContextRuns(team.id),
+    // The bot belongs to the leader, not the team: one account covers every
+    // team they lead, so this is looked up by leader_id.
+    //
+    // When YOU are that leader, skip the database entirely: the credential is a
+    // file on this machine, and reading it is both authoritative and free of
+    // any sync gap. `publishBotStatus` also writes the row on the way past, so
+    // simply visiting your own team page keeps the copy other members see up to
+    // date. The database lookup below is only for viewing *someone else's*
+    // team, where the file is on a laptop you cannot reach.
+    isLeader
+      ? publishBotStatus(createSupabaseServerClient(), user.id)
+      : getLeaderBotStatus(team.leader_id),
   ]);
+
+  // Two sources, one badge. `publishBotStatus` returns the on-disk status for
+  // the leader; `getLeaderBotStatus` returns a database row (or "unknown" when
+  // that lookup itself failed) for everyone else.
+  const badge: { status: BadgeStatus; email: string | null } =
+    botStatus === "unknown"
+      ? { status: "unknown", email: null }
+      : botStatus === null
+        ? { status: "none", email: null }
+        : "state" in botStatus
+          ? {
+              // A run that failed is not a credential that failed; the badge
+              // only ever shows what the leader *has*.
+              status: botStatus.state === "failed" ? "none" : botStatus.state,
+              email: botStatus.googleEmail,
+            }
+          : { status: botStatus.status, email: botStatus.google_email };
 
   const integrations = isLeader ? await getIntegrationsView(team.id) : null;
   const anyIntegration = Boolean(
@@ -65,6 +97,11 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
               ) : (
                 <span className="chip">led by {leaderName}</span>
               )}
+              <BotStatusBadge
+                status={badge.status}
+                subject={isLeader ? "Your bot" : `${leaderName ?? "The leader"}'s bot`}
+                googleEmail={badge.email}
+              />
             </div>
             {team.description && (
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">

@@ -2,6 +2,7 @@ import { collectGitHub } from "./github";
 import { collectJira } from "./jira";
 import { collectSlack } from "./slack";
 import { enforceBudget, estimateTokens, LIMITS, prune, truncate } from "./compaction";
+import { analyse } from "./analytics";
 import { PRE_CONTEXT_SCHEMA } from "./types";
 import type { PreContextPayload, RosterEntry } from "./types";
 import type {
@@ -71,12 +72,21 @@ export function buildRoster(members: TeamMemberWithEmployee[]): RosterEntry[] {
  */
 function buildDigest(payload: PreContextPayload): string[] {
   const lines: string[] = [];
-  const { roster, github, jira, team } = payload;
+  const { roster, github, jira, team, analysis } = payload;
 
   lines.push(
     `${team.name}: ${roster.length} member(s)` +
       (team.sprint ? `, sprint "${team.sprint}"` : ""),
   );
+
+  // The headline verdict, which the analysis has already worked out.
+  if (analysis?.sprint) lines.push(analysis.sprint.note);
+  if (analysis && !analysis.complete) {
+    lines.push(
+      "NOTE: at least one source failed, so any statement here about someone " +
+        "having done nothing may be a gap in the data rather than a fact.",
+    );
+  }
 
   if (jira?.sprint) {
     const s = jira.sprint;
@@ -87,7 +97,8 @@ function buildDigest(payload: PreContextPayload): string[] {
           : `ended ${Math.abs(s.days_left)}d ago`
         : "no end date";
     lines.push(`Jira sprint "${s.name}" (${s.state}, ${window}).`);
-    if (s.goal) lines.push(`Sprint goal: ${s.goal}`);
+    // The goal is already the first talking point; repeating it here would
+    // spend tokens twice on the payload's single most-quoted sentence.
   }
 
   if (jira?.status_counts) {
@@ -253,6 +264,19 @@ export async function generatePreContext(
 
   // Always at least one line (the team header), so this never prunes away —
   // but be explicit rather than relying on buildDigest never returning [].
+  // Analyse before the digest: the digest is now a summary OF the analysis
+  // rather than a second, independently-derived set of facts that could
+  // disagree with it.
+  //
+  // `complete` gates every conclusion drawn from an absence. A failed GitHub
+  // call must never reach the meeting as "the team did no work".
+  const attemptedSources = [github.outcome, jira.outcome, slack.outcome].filter(
+    (o) => !o.skipped,
+  );
+  const complete =
+    attemptedSources.length > 0 && attemptedSources.every((o) => o.ok);
+
+  payload.analysis = analyse(payload, complete);
   payload.digest = buildDigest(payload) ?? [];
 
   // Prune, then budget, then measure — measuring before the shrink would report
@@ -265,6 +289,16 @@ export async function generatePreContext(
   // Letting prune eat it turned a clean run into a TypeError.
   const pruned = prune(payload);
   pruned.meta = payload.meta;
+
+  // Same trap as meta: prune drops empty arrays, and `risks: []` is a
+  // statement ("nothing flagged"), not an absence. Consumers read
+  // `analysis.risks.length` directly, so the arrays are restored while the
+  // per-member rows keep the pruning that makes them cheap.
+  if (pruned.analysis) {
+    pruned.analysis.risks ??= [];
+    pruned.analysis.talking_points ??= [];
+    pruned.analysis.per_member ??= [];
+  }
   const budgeted = enforceBudget(pruned);
   const serialised = JSON.stringify(budgeted);
   budgeted.meta.bytes = Buffer.byteLength(serialised, "utf8");

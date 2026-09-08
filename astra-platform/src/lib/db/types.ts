@@ -137,3 +137,19 @@ export interface TeamSummary extends Team {
   my_role: string | null;
   i_lead: boolean;
 }
+
+/** Status of a Team Leader's Google bot session. Never the session itself. */
+export type BotCredentialStatus = "none" | "authenticated" | "expired" | "revoked";
+
+export interface BotCredential {
+  user_id: Uuid;
+  status: BotCredentialStatus;
+  google_email: string | null;
+  cookie_count: number | null;
+  expires_at: string | null;
+  /** Phase 1: a local path. Phase 2: the Supabase Storage key. */
+  storage_path: string | null;
+  last_error: string | null;
+  updated_at: string;
+  created_at: string;
+}

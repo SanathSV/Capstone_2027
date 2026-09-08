@@ -294,7 +294,7 @@ export async function collectGitHub(
         url: pr.html_url,
       };
       if (pr.draft) item.draft = true;
-      if (reviewers.length) item.reviews = `awaiting ${reviewers.join(", ")}`;
+      if (reviewers.length) item.reviewers = reviewers;
       const labels = pr.labels.map((l) => l.name).slice(0, 4);
       if (labels.length) item.labels = labels;
       return item;
@@ -311,6 +311,24 @@ export async function collectGitHub(
     return login ? byLogin.has(login) : false;
   });
   const commitSource = byLogin.size > 0 ? teamCommits : allCommits;
+
+  // Commits by people who are not in the resource pool are dropped on purpose —
+  // the payload is about this standup, not the repository. But dropping them
+  // silently is how "why are none of Souriesh's commits here?" becomes an hour
+  // of debugging, so say it: the roster, not the harvest, is what excluded them.
+  if (byLogin.size > 0 && allCommits.length > teamCommits.length) {
+    const outsiders = [
+      ...new Set(
+        allCommits
+          .filter((c) => !byLogin.has(c.author?.login?.toLowerCase() ?? ""))
+          .map((c) => c.author?.login ?? c.commit.author?.name ?? "unknown"),
+      ),
+    ];
+    truncated.push(
+      `github: ${allCommits.length - teamCommits.length} commit(s) by ` +
+        `${outsiders.slice(0, 5).join(", ")} — not in the resource pool, so not on this team`,
+    );
+  }
 
   for (const c of commitSource) {
     const ref = byLogin.get(c.author?.login?.toLowerCase() ?? "")?.ref;

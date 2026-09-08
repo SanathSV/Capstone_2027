@@ -28,7 +28,11 @@ export function json<T>(body: T, status = 200) {
  * becomes a 500 — with the real message logged server-side but never leaked to
  * the client, since these messages can quote database internals.
  */
-export function route<T>(handler: () => Promise<NextResponse<T>>) {
+// Not generic in the body type: a handler may legitimately return different
+// shapes on different branches (DELETE returning either a cancellation or a
+// revocation, say), and pinning T to whichever branch TypeScript saw first
+// rejects the others for no benefit — nothing downstream reads the body type.
+export function route(handler: () => Promise<NextResponse>) {
   return handler().catch((error: unknown) => {
     if (error instanceof ApiError) {
       return NextResponse.json(

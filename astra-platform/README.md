@@ -899,6 +899,8 @@ so you are not locked out of your own directory.
 | `SUPABASE_SERVICE_ROLE_KEY` | same page | `sb_secret_…` or the legacy `service_role` JWT. **Server only.** Bypasses every RLS policy. |
 | `ASTRA_ENCRYPTION_KEY` | `npm run keygen` | 32 random bytes, base64. Encrypts the stored tokens. |
 | `NEXT_PUBLIC_SITE_URL` | you | Used to build the auth redirect URL. |
+| `ASTRA_ALLOW_LOCAL_BOT_AUTH` | you | `1` to permit the headful bot sign-in. Leave unset on a server. |
+| `ASTRA_PYTHON` | you | Interpreter with Playwright installed. Optional. |
 
 **On `ASTRA_ENCRYPTION_KEY`:** every GitHub/Jira/Slack token is stored as
 AES-256-GCM ciphertext in an envelope (`v1.<iv>.<tag>.<ciphertext>`). Rotating
@@ -930,6 +932,8 @@ requireTeamLeader()          RLS proves the caller leads this team
         │            └─ Slack   channel membership vs. the roster's Slack IDs
         │                       (all three in parallel; each fails independently)
         │
+        ├── analyse          sprint health, per-person rollup, risks, agenda
+        │
         ├── compact          prune nulls, cap lists, truncate text, enforce 96 KB
         │
         └── emit             JSON response + console.log + pre_context_runs row
@@ -955,6 +959,37 @@ mistaken for a quiet sprint.
 The payload also carries a **digest**: pre-computed facts the model would
 otherwise have to derive mid-sentence — days left in the sprint, PRs open more
 than a week, who has no commits in the window, who has nothing assigned.
+
+### The analysis layer
+
+Raw lists make the bot do arithmetic mid-sentence, which is exactly when models
+invent numbers. So
+[`src/lib/context/analytics.ts`](src/lib/context/analytics.ts) does the
+reasoning once, deterministically, and the payload carries conclusions.
+
+| Field | What it answers |
+|---|---|
+| `analysis.sprint` | Completion measured **against elapsed time** — "60% done" is excellent on day three and alarming on day nine. Verdict is `ahead` / `on_track` / `behind` / `at_risk`, with one sentence safe to read aloud. Uses story points when the team estimates, issue count otherwise. |
+| `analysis.per_member` | One row per person, sorted busiest-first — commits, open and stale PRs, **reviews waiting on them**, issues in progress, done, points, branches. Shaped like the meeting: a standup goes around the room, so does this. |
+| `analysis.risks` | Everything worth flagging, most serious first: stale PRs, stalled issues, WIP overload, review bottlenecks, idle members, and *claimed-but-quiet* — work in progress in Jira with nothing in the repository, which is the most useful cross-source signal in the payload. |
+| `analysis.talking_points` | The agenda, in order, as sentences. At most two items of any one kind, so it covers different problems rather than six near-identical stale PRs; the rest roll into a counted line and stay individually in `risks`. |
+| `analysis.totals` | Headline counts, so nothing has to be summed. |
+| `analysis.complete` | Whether every configured source answered. |
+
+**`complete` is the important field.** Every conclusion drawn from an *absence*
+is gated on it. "Nobody heard from Kat this week" is a sentence that gets said
+out loud in a meeting, and it must never be an artefact of a branch that 403'd —
+so with a failed source, the analysis reports what it observed and asserts
+nothing about what it did not.
+
+Thresholds live in one block at the top of that file: stale at 7 days, very
+stale at 14, WIP limit 3, stalled issue at 5 days, review bottleneck at 3,
+15 points of schedule tolerance.
+
+**Cost.** On a 9-person team with 20 PRs, 30 commits and 50 sprint issues the
+analysis adds ~1,300 tokens against ~3,800 for the raw sections — about 34%
+overhead, and roughly a fifth of the 96 KB budget in total. It buys back more
+than it costs: the bot reads a verdict instead of deriving one.
 
 ### Partial failure is normal
 
@@ -991,6 +1026,25 @@ GitHub context and no Jira context is still a much better standup.
     "issues": [{ "key": "PAY-812", "summary": "…", "status": "In Progress", "assignee": "alanturing" }],
     "status_counts": { "To Do": 3, "In Progress": 5, "Done": 11 }
   },
+  // The derived layer: read this first, it is the same facts already reasoned about.
+  "analysis": {
+    "sprint": { "verdict": "behind", "elapsed_pct": 57, "points_done_pct": 33,
+                "days_left": 6, "goal": "Settlement retries under 200ms",
+                "note": "33% complete with 57% elapsed — 24 points behind the line." },
+    "per_member": [
+      { "ref": "katjohnson", "name": "Kat Johnson", "role": "Frontend Dev",
+        "commits": 0, "prs_open": 0, "prs_stale": 0, "in_progress": 4, "done": 0,
+        "signals": ["4 issue(s) in progress but no commits or PRs"] }
+    ],
+    "risks": [
+      { "kind": "claimed_but_quiet", "severity": "medium", "subject": "katjohnson",
+        "detail": "Kat Johnson has 4 issue(s) in progress but nothing in the repository — worth asking what is blocking them." }
+    ],
+    "talking_points": ["Sprint goal: Settlement retries under 200ms", "…"],
+    "totals": { "members": 6, "commits": 16, "open_prs": 4, "stale_prs": 2,
+                "issues": 50, "in_progress": 17 },
+    "complete": true
+  },
   "digest": ["Jira sprint \"Sprint 24\" (active, 4d remaining).", "…"],
   "meta":   { "sources": {…}, "truncated": [], "token_estimate": 1840, "bytes": 7362 }
 }
@@ -1024,6 +1078,71 @@ docker run \
 ---
 
 ## Google auth for the bot
+
+**One bot account per Team Leader, not per team.** A leader who runs three
+standups signs in once, and every team they lead uses that session. The
+credential is therefore keyed on the leader's user id, never on a team id.
+
+### Setting it up
+
+**Settings → Bot Account Setup → Authenticate Bot Account.** That opens a real
+Chromium window on the machine running Astra; sign in to the dedicated bot
+Google account there, then close it. The page polls and updates itself.
+
+The session is written to
+
+```
+bot-auth/secrets/leaders/{user_id}/auth.json     the credential
+bot-auth/secrets/leaders/{user_id}/meta.json     the status the dashboard reads
+```
+
+`meta.json` exists so that answering "is this bot ready?" never involves opening
+a file full of live Google cookies.
+
+### Why this only works locally
+
+Signing in means completing Google's password prompt, 2FA and device checks *by
+hand*. That needs a screen and the leader in front of it, which a deployed
+server has neither of. So the flow is gated on
+`ASTRA_ALLOW_LOCAL_BOT_AUTH=1` — unset on a real server, where the button then
+explains why instead of hanging on a window that can never appear.
+
+Set `ASTRA_PYTHON` if the interpreter with Playwright installed is not plain
+`python` / `python3` (a virtualenv, typically).
+
+### How other people see the status
+
+The credential is on one laptop, but a team member needs to know before the
+standup whether their leader's bot can actually join. So the file stays local
+and its **status** is published to `bot_credentials` in Postgres — status,
+the bot's Google address, cookie count, expiry. Never the session itself. The
+team page reads that row and shows the leader's badge to everyone.
+
+| Badge | Means |
+|---|---|
+| **Authenticated** | signed in, and the session has not expired |
+| **Expired** | there was a session; its cookies have lapsed |
+| **Revoked** | deliberately signed out |
+| **Not Authenticated** | never set up — the bot would join as a guest, if admitted at all |
+
+Run [`supabase/add-bot-credentials.sql`](supabase/add-bot-credentials.sql) to
+create that table. Additive, no data loss.
+
+### Phase 2
+
+`auth.json` moves to Supabase Storage under `leaders/{user_id}/auth.json` in a
+private bucket, and the bot container downloads it with a signed URL instead of
+having it bind-mounted. The local layout already mirrors those keys, so the
+migration is a copy rather than a rename. The upload hook is marked in
+`src/lib/botAuth.ts`, in the run's `close` handler — the one place where a run
+is known to have succeeded.
+
+### The script on its own
+
+The same script is still a normal CLI, which is how you check a session without
+the dashboard:
+
+
 
 The bot joins Meet as a real signed-in account: guests wait in the lobby, cannot
 always enable captions, and some organisations refuse them outright.
@@ -1073,11 +1192,18 @@ astra-platform/
 ├── bot-auth/
 │   ├── generate_google_auth.py   headful sign-in → auth.json
 │   └── requirements.txt
+├── chrome-extension/          standalone MV3 extension (no build step)
+│   ├── manifest.json
+│   ├── config.js              your Supabase URL + key + API base
+│   ├── popup.html/.css/.js
+│   ├── background.js          session refresh + tab badge
+│   └── lib/                   supabase (fetch-only), session, api
 └── src/
     ├── middleware.ts          session refresh + route gating
     ├── app/
     │   ├── login/             sign in / sign up / magic link / forgot password
     │   ├── reset-password/    set a new password after a recovery link
+    │   ├── settings/         profile, and Bot Account Setup
     │   ├── dashboard/         Teams I Lead · Teams I am In
     │   ├── directory/         the resource pool
     │   ├── teams/new/         three-step creation wizard
@@ -1087,15 +1213,52 @@ astra-platform/
     └── lib/
         ├── api.ts             error envelope, auth + leader guards
         ├── crypto.ts          AES-256-GCM envelope for stored tokens
+        ├── preContextService.ts  the generation flow, shared by both routes
+        ├── apiAuth.ts        bearer-token auth + CORS, for the extension
+        ├── botAuth.ts        spawns the Playwright sign-in, reads its status
         ├── db/                row types and server-side queries
         └── context/           ← the engine
             ├── aggregate.ts   fan-out, digest, status
+            ├── analytics.ts   ← sprint health, risks, the agenda
+            ├── markdown.ts    ← the payload as Markdown (what ships)
             ├── github.ts      repo · PRs · commits
             ├── jira.ts        board → sprint → issues
             ├── slack.ts       channel membership check
             ├── compaction.ts  the token budget
             └── http.ts        timeouts, retries, readable errors
 ```
+
+---
+
+## The Chrome extension
+
+[`chrome-extension/`](chrome-extension/) is a standalone Manifest V3 extension
+that summons a briefed bot into whatever Google Meet you are looking at. No
+build step — point **Load unpacked** at the folder. Set your Supabase values in
+`chrome-extension/config.js` first; the full guide is
+[`chrome-extension/README.md`](chrome-extension/README.md).
+
+It signs in with Supabase Auth, lists the teams you lead, and on selecting one
+**prefetches both payloads** — the team's pre-context and your bot's Google
+session — so that pressing **Connect Bot** is a single POST of data already in
+memory rather than the start of a multi-second wait while the meeting runs.
+
+Three routes exist for it, all bearer-authenticated and CORS-enabled, because an
+extension has its own origin and no cookies for this site:
+
+| Route | Returns |
+|---|---|
+| `GET /api/teams/:id/precontext` | **Markdown** — about half the tokens of the same data as JSON (see [COMPACTION_ALGO.md](COMPACTION_ALGO.md)). A run under 10 minutes old, or freshly generated. `?format=json` for the structured payload; `?refresh=1` forces a new run. |
+| `GET /api/bot-auth/session` | Your own bot session. Local-only, gated on `ASTRA_ALLOW_LOCAL_BOT_AUTH`. |
+| `POST /api/bot/summon` | Prints the four fields and acknowledges. Phase 2 launches the container here. |
+
+**On credentials.** `/api/bot-auth/session` returns a live Google session, so it
+only ever serves the caller's own, only on a machine with the local flag set,
+and the summon log records the credential's *shape* — counts, state, the bot's
+email — never a cookie value. A terminal log is the easiest place to leak a
+secret from. Round-tripping it through a browser is a Phase-1 convenience; in
+Phase 2 the container reads it straight from Supabase Storage and that route
+goes away.
 
 ---
 
@@ -1122,7 +1285,12 @@ forged request fails twice.
 | `DELETE` | `/api/teams/:id/members/:memberId` | leader | Unseat (they stay in the pool). |
 | `GET` | `/api/teams/:id/integrations` | leader | Redacted view — booleans, never tokens. |
 | `PUT` | `/api/teams/:id/integrations` | leader | Save. Omitted token = unchanged, `""` = cleared. |
-| `POST` | `/api/teams/:id/pre-context` | leader | **Generate the payload.** |
+| `POST` | `/api/teams/:id/pre-context` | leader | **Generate the payload.** Always fresh; never cached. |
+| `GET` | `/api/teams/:id/precontext` | leader | Same engine, but reuses a run under 10 minutes old. For the extension's prefetch. |
+| `GET` | `/api/bot-auth` | any user | Your bot's status, and any sign-in in flight. |
+| `POST` | `/api/bot-auth` | any user | Open the headful Google sign-in window. |
+| `GET` | `/api/bot-auth/status` | any user | Cheap poll while that window is open. |
+| `DELETE` | `/api/bot-auth` | any user | Revoke, or `?cancel=1` to abort a sign-in. |
 
 Errors are uniform: `{ "error": "a sentence you can act on", "detail": null }`
 with a real status code. Unexpected failures log server-side and return a

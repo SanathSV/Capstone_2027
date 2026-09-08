@@ -52,6 +52,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import stat
 import sys
 import threading
@@ -81,6 +82,47 @@ except ImportError:  # pragma: no cover - the message is the whole point
 # the Next.js tree, so a stray `next build` can never sweep it into a bundle.
 DEFAULT_DIR = Path(__file__).resolve().parent / "secrets"
 DEFAULT_OUT = DEFAULT_DIR / "auth.json"
+
+# One bot account per TEAM LEADER, not per team: a leader who runs three
+# standups signs in once and every team they lead uses that session. The
+# layout mirrors the Supabase Storage keys this moves to in Phase 2
+# (leaders/{user_id}/auth.json), so the migration is a copy, not a rename.
+LEADERS_DIR = DEFAULT_DIR / "leaders"
+
+
+def leader_paths(user_id: str) -> Dict[str, Path]:
+    """Where a given leader's credentials and metadata live."""
+    base = LEADERS_DIR / user_id
+    return {
+        "dir": base,
+        "auth": base / "auth.json",
+        # Read by the dashboard so it can show a status without parsing --
+        # or even being able to read -- the session file itself.
+        "meta": base / "meta.json",
+        "profile": base / "profile",
+    }
+
+
+UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.I,
+)
+
+
+def validate_user_id(value: str) -> str:
+    """A user id becomes a directory name, so it is checked, not trusted.
+
+    The dashboard passes this through from a session, but this script is also
+    a CLI anyone can run, and "../.." is a directory name too.
+    """
+    if not UUID_RE.match(value or ""):
+        raise SystemExit(
+            f"--user-id must be a UUID (got {value!r}). It is the Astra user id "
+            "of the Team Leader this bot account belongs to."
+        )
+    return value.lower()
+
+
 # A persistent Chrome profile makes the *interactive* sign-in survive a retry:
 # if the export fails you are not asked to complete 2FA a second time.
 DEFAULT_PROFILE = DEFAULT_DIR / "profile"
@@ -187,6 +229,20 @@ def describe_auth_file(path: Path) -> Optional[Dict[str, Any]]:
         ),
         "bytes": path.stat().st_size,
     }
+
+
+def write_meta(meta_path: Path, payload: Dict[str, Any]) -> None:
+    """Write the machine-readable status the dashboard polls.
+
+    Separate from auth.json on purpose. The dashboard needs to answer "is
+    this leader's bot ready?" constantly; it should never have to open a file
+    full of live Google cookies to do it.
+    """
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {**payload, "updated_at": datetime.now(timezone.utc).isoformat()}
+    tmp = meta_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp.replace(meta_path)
 
 
 def print_summary(summary: Dict[str, Any]) -> None:
@@ -406,6 +462,11 @@ async def run_login(args: argparse.Namespace) -> int:
             if not signed_in:
                 log("no Google session was established.")
                 log("Re-run this script and complete the sign-in.")
+                record_status(
+                    args,
+                    "failed",
+                    error="Sign-in was not completed, so no session was captured.",
+                )
                 return EXIT_NO_SESSION
 
             account = await detect_account(context)
@@ -413,7 +474,10 @@ async def run_login(args: argparse.Namespace) -> int:
                 log(f"signed in as {account}")
 
             if not await export_auth(context, out_path):
+                record_status(args, "failed", error="The session could not be exported.")
                 return EXIT_NO_SESSION
+
+            record_status(args, "authenticated", account=account)
 
         finally:
             try:
@@ -469,12 +533,64 @@ def run_check(args: argparse.Namespace) -> int:
     summary = describe_auth_file(out_path)
     if not summary:
         log(f"no credentials file at {out_path}.")
+        record_status(args, "none", error="No credentials file on this machine.")
         return EXIT_NO_SESSION
     print_summary(summary)
     if not summary["signed_in"]:
         log("this file carries no Google session.")
+        record_status(args, "expired", error="The file carries no Google session.")
         return EXIT_NO_SESSION
+    record_status(args, "authenticated")
     return EXIT_OK
+
+
+def record_status(
+    args: argparse.Namespace,
+    state: str,
+    account: Optional[str] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Write meta.json next to auth.json, when running for a specific leader.
+
+    The dashboard polls this file. Writing it on failure as well as on success
+    is the point: a run that ends without a session should leave "failed" and
+    a reason behind, not silence that looks identical to "never tried".
+    """
+    meta_path = getattr(args, "meta", None)
+    if meta_path is None:
+        return  # plain CLI run, no leader to report on
+
+    out_path = Path(args.out)
+    summary = describe_auth_file(out_path) or {}
+
+    # A failed RUN is not a failed CREDENTIAL.
+    #
+    # Someone who opens the sign-in window and closes it without finishing has
+    # not broken anything -- the auth.json from last time is still sitting there
+    # and still works. Recording "failed" here would throw that away, and the
+    # dashboard would report a bot that cannot join meetings when it can. The
+    # file on disk is the truth; this is only its label.
+    run_error = error
+    if state == "failed" and summary.get("signed_in"):
+        log("the previous session is still valid, so it is kept.")
+        state = "authenticated"
+
+    write_meta(
+        meta_path,
+        {
+            "user_id": args.user_id,
+            "status": state,
+            "last_run_error": run_error,
+            "google_email": account,
+            "cookie_count": summary.get("cookies_auth"),
+            "expires_at": summary.get("expires_at"),
+            "signed_in": bool(summary.get("signed_in")),
+            # Phase 1 this is a path on this machine. Phase 2 it becomes the
+            # Supabase Storage key `leaders/{user_id}/auth.json`.
+            "storage_path": str(out_path),
+            "error": error,
+        },
+    )
 
 
 def print_next_steps(out_path: Path) -> None:
@@ -510,6 +626,13 @@ def parse_args() -> argparse.Namespace:
             "The file it writes is a live Google session. Keep it out of git and "
             "out of container images; mount it at run time instead."
         ),
+    )
+    parser.add_argument(
+        "--user-id",
+        default=None,
+        help="Astra user id of the Team Leader. Writes to "
+             "secrets/leaders/<user-id>/auth.json and keeps a meta.json "
+             "beside it for the dashboard. Overrides --out.",
     )
     parser.add_argument(
         "--out",
@@ -559,6 +682,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     _force_utf8_output()
     args = parse_args()
+
+    # --user-id is the dashboard's entry point; it decides every path so the
+    # web layer never has to know the on-disk layout.
+    args.meta = None
+    if args.user_id:
+        user_id = validate_user_id(args.user_id)
+        paths = leader_paths(user_id)
+        args.out = str(paths["auth"])
+        args.profile = str(paths["profile"])
+        args.meta = paths["meta"]
+        log(f"bot account for leader {user_id}")
 
     if args.check:
         return run_check(args)

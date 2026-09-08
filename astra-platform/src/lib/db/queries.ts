@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
+  BotCredential,
   Employee,
   Profile,
   PreContextRun,
@@ -131,6 +132,46 @@ export async function getTeamLeaderName(leaderId: string): Promise<string | null
     .eq("id", leaderId)
     .maybeSingle();
   return data?.full_name ?? data?.email ?? null;
+}
+
+/**
+ * A Team Leader's bot status, readable by anyone who can see the team.
+ *
+ * This comes from Postgres rather than from disk, and that is the whole
+ * point: the `auth.json` that actually proves the bot is signed in lives on
+ * the leader's own machine, so a member opening this page could never read
+ * it. The leader's dashboard publishes the *status* to `bot_credentials`, and
+ * that is what everyone else sees.
+ */
+export async function getLeaderBotStatus(
+  leaderId: string,
+): Promise<BotCredential | null | "unknown"> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("bot_credentials")
+    .select("*")
+    .eq("user_id", leaderId)
+    .maybeSingle();
+
+  // Three outcomes, and they are not the same thing:
+  //
+  //   a row        -> report it
+  //   no row       -> the leader has never set the bot up: "Not Authenticated"
+  //   an ERROR     -> we genuinely do not know, and saying "Not Authenticated"
+  //                   would be a claim we cannot support. The commonest cause
+  //                   is PGRST205, the table missing from PostgREST's schema
+  //                   cache, which has nothing to do with the leader's bot.
+  if (error) {
+    console.error(
+      "[astra] could not read bot status:",
+      error.message,
+      error.code === "PGRST205"
+        ? "— run supabase/FIX_bot_credentials.sql"
+        : "",
+    );
+    return "unknown";
+  }
+  return (data as BotCredential) ?? null;
 }
 
 export async function getTeamMembers(

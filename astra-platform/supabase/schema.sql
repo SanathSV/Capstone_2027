@@ -18,6 +18,9 @@ create schema if not exists private;
 -- ---------------------------------------------------------------------------
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- bot_credentials references profiles, so the cascade below would take it
+-- out anyway. Naming it here makes that explicit rather than incidental.
+drop table if exists public.bot_credentials cascade;
 drop table if exists public.pre_context_runs cascade;
 drop table if exists public.team_integrations cascade;
 drop table if exists public.team_members     cascade;
@@ -198,6 +201,49 @@ create index pre_context_runs_team_created_idx
   on public.pre_context_runs (team_id, created_at desc);
 create index pre_context_runs_generated_by_idx on public.pre_context_runs (generated_by);
 
+-- ---------------------------------------------------------------------------
+-- 7b. bot_credentials — status of each Team Leader's Google bot session
+-- ---------------------------------------------------------------------------
+-- NOT the credential. The Google session lives in an auth.json on the leader's
+-- own machine (bot-auth/secrets/leaders/{user_id}/auth.json), and in Phase 2 it
+-- moves to Supabase Storage under leaders/{user_id}/auth.json. No cookie or
+-- token is ever written here.
+--
+-- This is the *status*, and it exists because status has to be visible to
+-- people who are not standing at that machine: a team member opening a team
+-- page needs to know whether the leader's bot can join the meeting, and the
+-- file that answers that is on somebody else's laptop.
+--
+-- One row per leader, not per team: one bot account covers every team a leader
+-- leads, which is why this is keyed on the user.
+create table public.bot_credentials (
+  user_id      uuid primary key references public.profiles (id) on delete cascade,
+
+  status       text not null default 'none'
+               check (status in ('none', 'authenticated', 'expired', 'revoked')),
+
+  -- Which Google account was signed in, so a leader who authenticated the wrong
+  -- one (their personal address, say) can see that at a glance.
+  google_email text check (length(google_email) <= 254),
+
+  cookie_count integer check (cookie_count >= 0),
+  -- The earliest expiry among the Google auth cookies: when the bot goes stale.
+  expires_at   timestamptz,
+
+  -- Phase 1: a path on the leader's own filesystem.
+  -- Phase 2: the Supabase Storage key, `leaders/{user_id}/auth.json`.
+  storage_path text check (length(storage_path) <= 1024),
+
+  last_error   text,
+  updated_at   timestamptz not null default now(),
+  created_at   timestamptz not null default now()
+);
+
+create index bot_credentials_status_idx on public.bot_credentials (status);
+
+comment on table public.bot_credentials is
+  'Status of each Team Leader''s Google bot session. Never the session itself.';
+
 -- ===========================================================================
 -- 7. Triggers
 -- ===========================================================================
@@ -225,6 +271,9 @@ create trigger teams_touch_updated_at
   for each row execute function public.touch_updated_at();
 create trigger team_integrations_touch_updated_at
   before update on public.team_integrations
+  for each row execute function public.touch_updated_at();
+create trigger bot_credentials_touch_updated_at
+  before update on public.bot_credentials
   for each row execute function public.touch_updated_at();
 
 -- --- new auth user -> profile, and adopt any directory row with that email ---
@@ -432,6 +481,7 @@ alter table public.teams             enable row level security;
 alter table public.team_members      enable row level security;
 alter table public.team_integrations enable row level security;
 alter table public.pre_context_runs  enable row level security;
+alter table public.bot_credentials   enable row level security;
 
 -- --- profiles ---------------------------------------------------------------
 -- Readable by any signed-in user: the dashboard shows "led by <name>" and the
@@ -520,6 +570,27 @@ create policy pre_context_runs_select_members on public.pre_context_runs
 create policy pre_context_runs_insert_leader on public.pre_context_runs
   for insert to authenticated with check ((select private.is_team_leader(team_id)));
 
+-- --- bot_credentials --------------------------------------------------------
+-- Readable by any signed-in user: this row is metadata about a bot account -- a
+-- status, a timestamp, and the bot's own email address -- and a team member has
+-- to be able to see whether their leader's bot is ready *before* the standup.
+create policy bot_credentials_select_authenticated on public.bot_credentials
+  for select to authenticated using (true);
+
+-- Only you can claim or change your own. A leader cannot mark someone else's
+-- bot authenticated, which would be a way to make a team look ready when it is
+-- not.
+create policy bot_credentials_insert_self on public.bot_credentials
+  for insert to authenticated with check (user_id = (select auth.uid()));
+
+create policy bot_credentials_update_self on public.bot_credentials
+  for update to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+create policy bot_credentials_delete_self on public.bot_credentials
+  for delete to authenticated using (user_id = (select auth.uid()));
+
 -- ===========================================================================
 -- 10. Grants (PostgREST checks table privileges before RLS is ever consulted)
 -- ===========================================================================
@@ -539,14 +610,16 @@ grant usage on schema public to anon, authenticated, service_role;
 
 grant select, insert, update, delete
   on public.profiles, public.employees, public.teams,
-     public.team_members, public.team_integrations, public.pre_context_runs
+     public.team_members, public.team_integrations, public.pre_context_runs,
+     public.bot_credentials
   to authenticated;
 
 -- The engine reads team_integrations and writes pre_context_runs with this
 -- role, after the caller's own session has already proved they lead the team.
 grant all privileges
   on public.profiles, public.employees, public.teams,
-     public.team_members, public.team_integrations, public.pre_context_runs
+     public.team_members, public.team_integrations, public.pre_context_runs,
+     public.bot_credentials
   to service_role;
 
 -- Sequences: none of the tables use one today (every key is a uuid), but a
@@ -570,3 +643,14 @@ grant usage, select on all sequences in schema public to authenticated, service_
 -- There is deliberately no UI for this. Granting the ability to edit the
 -- cross-walk is the one action in Astra that changes what every team's bot
 -- is told, so it is a decision someone makes at the database, on purpose.
+
+-- ---------------------------------------------------------------------------
+-- Tell PostgREST about the new tables
+-- ---------------------------------------------------------------------------
+-- PostgREST caches the schema and does not notice a CREATE TABLE on its own.
+-- Until it reloads, every request for a new table fails with
+--   PGRST205: Could not find the table 'public.x' in the schema cache
+-- which looks exactly like the migration never ran. This makes the migration
+-- self-sufficient; the dashboard button (Settings -> API -> Reload schema
+-- cache) does the same thing.
+notify pgrst, 'reload schema';
