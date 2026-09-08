@@ -1,0 +1,20 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Bot credentials produced by bot-auth/generate_google_auth.py.
+# auth.json IS a live Google session. Never commit it.
+bot-auth/secrets/
+**/auth.json
+**/storage_state.json
+
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/

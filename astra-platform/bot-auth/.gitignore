@@ -1,0 +1,4 @@
+# auth.json is a live Google session. Never commit it.
+secrets/
+*.json
+!package.json
