@@ -23,6 +23,16 @@ export const LIMITS = {
   issues: 50,
   /** How far back commit history is fetched. */
   commitWindowDays: 14,
+  /**
+   * Branches scanned for commits, most recently updated first.
+   *
+   * `GET /commits` without a `sha` only ever returns the default branch, which
+   * is precisely the wrong half of the picture for a standup: the work being
+   * discussed is almost always still on a feature branch. So every branch is
+   * scanned, and this caps how many — one extra request each, and a repository
+   * with 300 stale branches should not turn one click into 300 calls.
+   */
+  branches: 25,
   /** Character ceilings — long text is where the token budget disappears. */
   titleChars: 110,
   commitMsgChars: 100,

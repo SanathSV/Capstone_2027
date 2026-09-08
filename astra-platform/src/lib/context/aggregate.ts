@@ -98,8 +98,21 @@ function buildDigest(payload: PreContextPayload): string[] {
   if (github) {
     lines.push(
       `${github.repo}: ${github.open_prs.length} open PR(s) from this team, ` +
-        `${github.recent_commits.length} commit(s) in the last ${github.window_days}d.`,
+        `${github.recent_commits.length} commit(s) in the last ${github.window_days}d` +
+        (github.branches_scanned
+          ? ` across ${github.branches_scanned} branch(es)`
+          : "") +
+        ".",
     );
+
+    if (github.active_branches?.length) {
+      lines.push(
+        `Unmerged work in flight: ${github.active_branches
+          .slice(0, 6)
+          .map((b) => `${b.name} (${b.authors.join(", ")}, ${b.commits} commit(s))`)
+          .join("; ")}.`,
+      );
+    }
     const stale = github.open_prs.filter((pr) => pr.age_days >= 7);
     if (stale.length) {
       lines.push(

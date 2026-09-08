@@ -36,12 +36,13 @@ straight to the container — see [Why there is no cache](#why-there-is-no-cache
 1. [Quick start](#quick-start)
 2. [The database schema](#the-database-schema) — the DDL to paste into Supabase
 3. [Seed data](#seed-data)
-4. [Environment variables](#environment-variables)
-5. [How the pre-context engine works](#how-the-pre-context-engine-works)
-6. [Google auth for the bot](#google-auth-for-the-bot)
-7. [Project layout](#project-layout)
-8. [API reference](#api-reference)
-9. [Security notes](#security-notes)
+4. [Roles](#roles) — who may change the resource pool
+5. [Environment variables](#environment-variables)
+6. [How the pre-context engine works](#how-the-pre-context-engine-works)
+7. [Google auth for the bot](#google-auth-for-the-bot)
+8. [Project layout](#project-layout)
+9. [API reference](#api-reference)
+10. [Security notes](#security-notes)
 
 ---
 
@@ -76,11 +77,40 @@ Then, in the app:
 4. **Press Generate Pre-Context.** The payload is rendered on the page, printed
    to your `npm run dev` terminal, and stored in `pre_context_runs`.
 
-> **Supabase auth settings.** For local development, turn *off* "Confirm email"
-> under Authentication → Providers → Email, or you will have to click a
-> confirmation link before your first sign-in. If you leave it on, add
-> `http://localhost:3000/auth/callback` to Authentication → URL Configuration →
-> Redirect URLs.
+> **Supabase auth settings.** Two things, both in the dashboard:
+>
+> 1. For local development, turn *off* "Confirm email" under Authentication →
+>    Providers → Email. Otherwise every sign-up sends a confirmation mail, and
+>    the built-in sender allows only **2 emails per hour for the whole
+>    project** — a few minutes of testing exhausts it and sign-up starts
+>    returning `429`.
+> 2. Add `http://localhost:3000/auth/callback` to Authentication → URL
+>    Configuration → Redirect URLs. **Password recovery and magic links do not
+>    work without this** — Supabase refuses to redirect to an unlisted URL, so
+>    the link in the email dead-ends.
+
+### Signing in
+
+Three ways in, all landing on the same `profiles` row — the
+`on_auth_user_created` trigger does not care how you got there:
+
+| Method | Sends email? | Good for |
+|---|---|---|
+| Email + password | no (with confirmation off) | everyday use, and all local development |
+| Magic link | yes | people who would rather not manage a password |
+| Password reset | yes | forgetting the password |
+
+**Password recovery.** "Forgot password?" on the sign-in form sends a
+single-use link that expires in an hour. Opening it hits `/auth/callback`,
+which trades the one-time code for a real session and forwards to
+`/reset-password`. That page is therefore an ordinary authenticated
+`updateUser({ password })` call — there is no token being passed around in the
+URL for someone to leak in a `Referer` header.
+
+`/reset-password` is deliberately reachable while signed out: an expired or
+already-used link arrives with no session, and the page says so instead of
+bouncing you to a login form with no explanation. Both email-sending paths
+spend from the same 2-per-hour budget, which the form now says on screen.
 
 ---
 
@@ -94,7 +124,7 @@ Five tables plus an audit log:
 
 | Table | What it holds |
 |---|---|
-| `profiles` | One row per Astra user, mirroring `auth.users`. |
+| `profiles` | One row per Astra user, mirroring `auth.users`, plus their `role`. |
 | `employees` | The resource pool — the name↔handle cross-walk. |
 | `teams` | A team and its leader. |
 | `team_members` | Who is on a team, and their sprint role. |
@@ -111,6 +141,13 @@ Three design decisions worth knowing before you read the DDL:
   for months before they ever sign in. When they do,
   `handle_new_user` claims their directory row, and "Teams I am In" works from
   their first login.
+- **There are two roles, and only one privileged action.** `profiles.role` is
+  `'user'` or `'admin'`. Admins manage the resource pool — adding, editing and
+  removing people. Everyone else reads it, leads teams, and generates
+  pre-context exactly as before. Those handles decide whose commits and issues
+  land in every team's payload, which is why editing them is not open to all.
+  The **first account to sign up becomes the admin**, because otherwise the
+  directory would arrive unmanageable.
 - **RLS helpers live in a `private` schema.** `private.is_team_member()` and
   `private.is_team_leader()` are `SECURITY DEFINER`, so team policies can read
   `team_members` without recursing into that table's own policy. Both hard-code
@@ -149,6 +186,7 @@ drop function if exists public.handle_new_user()        cascade;
 drop function if exists public.link_employee_profile()  cascade;
 drop function if exists public.register_team_leader()   cascade;
 drop function if exists public.touch_updated_at()       cascade;
+drop function if exists private.is_admin()              cascade;
 drop function if exists private.is_team_leader(uuid)    cascade;
 drop function if exists private.is_team_member(uuid)    cascade;
 
@@ -162,6 +200,16 @@ create table public.profiles (
   email      text not null,
   full_name  text,
   avatar_url text,
+  -- Who may change the company directory.
+  --
+  --   'user'   the default. Reads the resource pool, leads and joins teams,
+  --            generates pre-context. Cannot add, edit or remove people.
+  --   'admin'  everything a user can do, plus managing the resource pool.
+  --
+  -- Two values rather than a permissions table because there is exactly one
+  -- privileged action in the product. A check constraint keeps the column
+  -- honest; widening it later is one ALTER away.
+  role       text not null default 'user' check (role in ('user', 'admin')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -169,6 +217,9 @@ create table public.profiles (
 -- Case-insensitive uniqueness: Google hands back "Sam@x.com" and "sam@x.com"
 -- for the same human, and the employee <-> profile link matches on lower(email).
 create unique index profiles_email_lower_key on public.profiles (lower(email));
+-- private.is_admin() runs on every directory write; this keeps it an index
+-- lookup rather than a scan once the profile table grows.
+create index profiles_admin_idx on public.profiles (id) where role = 'admin';
 
 comment on table public.profiles is
   'Astra users. Created automatically when someone signs up via Supabase Auth.';
@@ -340,8 +391,18 @@ language plpgsql
 security definer
 set search_path = ''
 as $fn$
+declare
+  v_role text;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url)
+  -- Bootstrapping: the very first person to sign up becomes the admin.
+  -- Without this nobody could ever add anyone to the resource pool, and the
+  -- app would arrive unusable with no way out except hand-editing SQL.
+  -- Everyone after them is a plain user; promote others deliberately with
+  -- the statement at the bottom of this file.
+  select case when exists (select 1 from public.profiles) then 'user' else 'admin' end
+    into v_role;
+
+  insert into public.profiles (id, email, full_name, avatar_url, role)
   values (
     new.id,
     new.email,
@@ -350,7 +411,8 @@ begin
       nullif(btrim(new.raw_user_meta_data ->> 'name'), ''),
       split_part(new.email, '@', 1)
     ),
-    new.raw_user_meta_data ->> 'avatar_url'
+    new.raw_user_meta_data ->> 'avatar_url',
+    v_role
   )
   on conflict (id) do nothing;
 
@@ -454,6 +516,23 @@ create trigger teams_register_leader
 -- passing someone else's team id tells you nothing you were not already
 -- allowed to know.
 
+-- Is the caller an admin? SECURITY DEFINER so it can read `profiles` without
+-- depending on that table's own policies, and it only ever asks about the
+-- calling user, so it cannot be used to probe anyone else's role.
+create or replace function private.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.profiles p
+     where p.id = (select auth.uid())
+       and p.role = 'admin'
+  );
+$fn$;
+
 create or replace function private.is_team_leader(p_team_id uuid)
 returns boolean
 language sql
@@ -490,9 +569,11 @@ $fn$;
 
 -- Nobody may call these directly through the API; `authenticated` needs EXECUTE
 -- only because RLS policy expressions are evaluated as the querying role.
+revoke execute on function private.is_admin()           from public, anon;
 revoke execute on function private.is_team_leader(uuid) from public, anon;
 revoke execute on function private.is_team_member(uuid) from public, anon;
 grant usage on schema private to authenticated;
+grant execute on function private.is_admin()           to authenticated;
 grant execute on function private.is_team_leader(uuid) to authenticated;
 grant execute on function private.is_team_member(uuid) to authenticated;
 
@@ -527,19 +608,30 @@ create policy profiles_update_self on public.profiles
 create policy employees_select_authenticated on public.employees
   for select to authenticated using (true);
 
-create policy employees_insert_authenticated on public.employees
+-- Writing to the directory is an ADMIN action. Everyone can read it -- team
+-- creation and the roster pickers depend on that -- but only an admin adds,
+-- edits or removes a person.
+--
+-- Enforced here rather than only in the UI: hiding a button stops the honest
+-- mistake, a policy stops a hand-written fetch() from the browser console.
+create policy employees_insert_admin on public.employees
   for insert to authenticated
-  with check (created_by = (select auth.uid()));
+  with check (
+    (select private.is_admin())
+    and created_by = (select auth.uid())
+  );
 
-create policy employees_update_authenticated on public.employees
+-- Editing is gated the same way. A directory nobody may add to, but anybody
+-- may rewrite, is not actually controlled: changing someone's GitHub handle
+-- silently redirects whose commits show up in that team's pre-context.
+create policy employees_update_admin on public.employees
   for update to authenticated
-  using ((select auth.uid()) is not null)
-  with check ((select auth.uid()) is not null);
+  using ((select private.is_admin()))
+  with check ((select private.is_admin()));
 
--- Deleting a directory entry is destructive (it cascades into every team's
--- roster), so it stays with whoever added the person.
-create policy employees_delete_own on public.employees
-  for delete to authenticated using (created_by = (select auth.uid()));
+-- Deleting cascades into every team's roster, so it is admin-only too.
+create policy employees_delete_admin on public.employees
+  for delete to authenticated using ((select private.is_admin()));
 
 -- --- teams ------------------------------------------------------------------
 create policy teams_select_visible on public.teams
@@ -618,6 +710,23 @@ grant all privileges
 -- future `generated always as identity` column would fail for these roles
 -- without this, in a way that is tedious to diagnose.
 grant usage, select on all sequences in schema public to authenticated, service_role;
+
+-- ===========================================================================
+-- 11. Roles
+-- ===========================================================================
+-- The first account to sign up is made an admin automatically (see
+-- handle_new_user above). To promote or demote anyone else, run:
+--
+--   update public.profiles set role = 'admin' where lower(email) = 'someone@company.com';
+--   update public.profiles set role = 'user'  where lower(email) = 'someone@company.com';
+--
+-- To see who currently holds it:
+--
+--   select email, role, created_at from public.profiles order by role, email;
+--
+-- There is deliberately no UI for this. Granting the ability to edit the
+-- cross-walk is the one action in Astra that changes what every team's bot
+-- is told, so it is a decision someone makes at the database, on purpose.
 ```
 
 ### Verifying it took
@@ -739,6 +848,43 @@ The integration credentials are deliberately **not** seeded. They have to be
 entered through the app so they are encrypted with your `ASTRA_ENCRYPTION_KEY`;
 plaintext written straight into the table would fail to decrypt on every later
 read.
+
+---
+
+## Roles
+
+| | `user` | `admin` |
+|---|---|---|
+| Read the resource pool | yes | yes |
+| **Add / edit / remove people in it** | **no** | **yes** |
+| Create a team, and lead it | yes | yes |
+| Put pool members on a team they lead | yes | yes |
+| Store that team's API credentials | yes | yes |
+| Generate pre-context for a team they lead | yes | yes |
+
+The first account to sign up is promoted automatically. After that:
+
+```sql
+update public.profiles set role = 'admin' where lower(email) = 'someone@company.com';
+update public.profiles set role = 'user'  where lower(email) = 'someone@company.com';
+select email, role from public.profiles order by role, email;
+```
+
+There is deliberately no UI for granting this. It is the one action that
+changes what every team's bot is told, so it is a decision someone makes at
+the database, on purpose.
+
+The Resource Pool page shows an **Admin** or **Read only** chip so you always
+know which you are. For a non-admin the add form is replaced by an explanation
+rather than being left visible and broken, and the per-row Edit and Remove
+buttons are absent. None of that is the actual protection — the RLS policies
+are, so a hand-written `fetch()` from the browser console is refused by the
+database just the same.
+
+**Already have a database?** Run
+[`supabase/add-roles.sql`](supabase/add-roles.sql). It is additive — one
+column, one helper, three policies — and promotes your existing first account
+so you are not locked out of your own directory.
 
 ---
 
@@ -930,7 +1076,8 @@ astra-platform/
 └── src/
     ├── middleware.ts          session refresh + route gating
     ├── app/
-    │   ├── login/             sign in / sign up / magic link
+    │   ├── login/             sign in / sign up / magic link / forgot password
+    │   ├── reset-password/    set a new password after a recovery link
     │   ├── dashboard/         Teams I Lead · Teams I am In
     │   ├── directory/         the resource pool
     │   ├── teams/new/         three-step creation wizard
@@ -961,9 +1108,9 @@ forged request fails twice.
 | Method | Path | Who | Does |
 |---|---|---|---|
 | `GET` | `/api/employees` | any user | List the resource pool. |
-| `POST` | `/api/employees` | any user | Add someone. Validates all three handles. |
-| `PATCH` | `/api/employees/:id` | any user | Update the fields you send. |
-| `DELETE` | `/api/employees/:id` | whoever added them | Remove; cascades into every roster. |
+| `POST` | `/api/employees` | **admin** | Add someone. Validates all three handles. |
+| `PATCH` | `/api/employees/:id` | **admin** | Update the fields you send. |
+| `DELETE` | `/api/employees/:id` | **admin** | Remove; cascades into every roster. |
 | `GET` | `/api/teams` | any user | Teams you lead or are on. |
 | `POST` | `/api/teams` | any user | Create a team + roster + integrations. You become Leader. |
 | `GET` | `/api/teams/:id` | member | One team. |

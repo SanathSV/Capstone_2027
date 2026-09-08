@@ -34,10 +34,17 @@ const BLANK: Draft = {
 
 export function DirectoryManager({
   employees,
-  currentUserId,
+  isAdmin,
 }: {
   employees: Employee[];
-  currentUserId: string;
+  /**
+   * Whether this user may change the directory.
+   *
+   * This only decides what is *rendered*. The RLS policies decide what is
+   * allowed, so a non-admin who reaches the API another way is refused by the
+   * database regardless of what this component drew.
+   */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(BLANK);
@@ -114,6 +121,27 @@ export function DirectoryManager({
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
       {/* ------------------------------------------------ add / edit form -- */}
+      {!isAdmin ? (
+        <div className="card h-fit space-y-3 p-5 lg:sticky lg:top-20">
+          <div className="flex items-center gap-2">
+            <LockIcon />
+            <h2 className="text-sm font-semibold text-slate-300">
+              Managed by an admin
+            </h2>
+          </div>
+          <p className="text-xs leading-relaxed text-slate-500">
+            Adding people to the resource pool, and editing the handles already in
+            it, is restricted to admins. Everything else is unaffected: you can
+            still put anyone listed here on a team you lead, and generate that
+            team&rsquo;s pre-context.
+          </p>
+          <p className="text-[11px] leading-relaxed text-slate-600">
+            Those handles decide whose commits and issues end up in every
+            team&rsquo;s payload, so they are deliberately not open to everyone.
+            Ask an admin to add someone, or to grant you the role.
+          </p>
+        </div>
+      ) : (
       <form onSubmit={save} className="card h-fit space-y-4 p-5 lg:sticky lg:top-20">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">
@@ -210,6 +238,7 @@ export function DirectoryManager({
           {busy ? "Saving…" : editingId ? "Save changes" : "Add to resource pool"}
         </button>
       </form>
+      )}
 
       {/* -------------------------------------------------------- the list -- */}
       <div className="space-y-3">
@@ -259,28 +288,43 @@ export function DirectoryManager({
                   <Handle kind="slack" value={employee.slack_user_id} />
                 </div>
 
-                <div className="ml-auto flex gap-1.5">
-                  <button
-                    onClick={() => edit(employee)}
-                    className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-ink-700 hover:text-white"
-                  >
-                    Edit
-                  </button>
-                  {employee.created_by === currentUserId && (
+                {isAdmin && (
+                  <div className="ml-auto flex gap-1.5">
+                    <button
+                      onClick={() => edit(employee)}
+                      className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-ink-700 hover:text-white"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => remove(employee.id, employee.full_name)}
                       className="rounded-md px-2 py-1 text-xs text-slate-500 transition hover:bg-signal-red/10 hover:text-signal-red"
                     >
                       Remove
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4 text-slate-500"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <rect x="4" y="10" width="16" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" strokeLinecap="round" />
+    </svg>
   );
 }
 

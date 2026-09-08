@@ -112,8 +112,10 @@ team, because they will appear on the roster and contribute nothing else.
 - Repository name, description, default branch, primary language
 - **Open pull requests** authored by roster members — age, draft state, labels,
   who review is waiting on
-- **Commits from the last 14 days** by roster members, and a per-person count
-- Which team members have committed *nothing* in that window
+- **Commits from the last 14 days across every branch** by roster members,
+  each labelled with the branch it lives on if it is not yet merged
+- **Active branches** — unmerged work in flight, and who is on it
+- A per-person commit count, and who has committed *nothing* in the window
 
 ### Creating the token
 
@@ -179,8 +181,13 @@ out of the payload.
 
 ### Rate limits
 
-A fine-grained token gets 5,000 requests/hour. Astra spends **three** per run.
-You are not going to hit this.
+A fine-grained token gets 5,000 requests/hour. Astra spends **three plus one per
+branch** per run — about 28 for a repository with 25 active branches. Even
+hourly runs across a dozen teams stay well inside the quota.
+
+The limit that actually matters is the *secondary* one, which triggers on burst
+concurrency rather than hourly volume; the branch scan therefore holds at most
+eight requests in flight.
 
 ---
 
@@ -386,6 +393,8 @@ The payload is also printed to your `npm run dev` terminal, in full.
 | Slack `channel_not_found` | Wrong ID, or a private channel without `groups:read` | Re-copy the ID; add the scope |
 | **All three fail** with a decryption error | `ASTRA_ENCRYPTION_KEY` changed | Re-enter every token so they re-encrypt |
 | Someone is in the roster but nowhere else | No handles recorded | Resource Pool → add them |
+| A branch's commits are missing | More than 25 branches; the rest are named in `meta.truncated` | Raise `LIMITS.branches` in `src/lib/context/compaction.ts` |
+| `quiet_members` missing from the payload | The branch scan was incomplete, so Astra will not guess | Check `meta.truncated` for the branch that failed |
 | `partial` status | Some sources failed, some worked | Read the cards; the payload is still usable |
 
 ### A note on rotation
@@ -405,13 +414,24 @@ Every request is read-only. Three sources, in parallel, each failing
 independently. Source:
 [`src/lib/context/`](src/lib/context/).
 
-### GitHub — 3 requests
+### GitHub — 3 requests plus one per branch
 
 ```http
 GET https://api.github.com/repos/{owner}/{repo}
 GET https://api.github.com/repos/{owner}/{repo}/pulls?state=open&sort=updated&direction=desc&per_page=100
-GET https://api.github.com/repos/{owner}/{repo}/commits?since={14 days ago}&per_page=100
+GET https://api.github.com/repos/{owner}/{repo}/branches?per_page=100
+GET https://api.github.com/repos/{owner}/{repo}/commits?sha={branch}&since={14 days ago}&per_page=100
 ```
+
+The last one runs **once per branch** (capped at 25, eight in flight at a
+time), because `/commits` without `sha` only ever returns the default branch —
+which hides exactly the work a standup is about, since it is still sitting on a
+feature branch.
+
+The default branch is scanned first on purpose. Branches share history, so most
+commits appear on several; whichever branch claims a SHA first keeps it. That
+means merged work reads as `main` and only genuinely unmerged commits carry a
+feature-branch name.
 
 Headers: `Authorization: Bearer <token>`, `X-GitHub-Api-Version: 2022-11-28`.
 

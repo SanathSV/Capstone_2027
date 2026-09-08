@@ -1,4 +1,12 @@
-import { ApiError, assertUuid, cleanString, json, readJson, requireUser, route } from "@/lib/api";
+import {
+  ApiError,
+  assertUuid,
+  cleanString,
+  json,
+  readJson,
+  requireAdmin,
+  route,
+} from "@/lib/api";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateHandles } from "@/lib/validation";
 import type { Employee } from "@/lib/db/types";
@@ -11,7 +19,7 @@ interface Params {
 
 export async function PATCH(request: Request, { params }: Params) {
   return route(async () => {
-    await requireUser();
+    await requireAdmin();
     const id = assertUuid(params.id, "Employee id");
     const body = await readJson<Record<string, unknown>>(request);
 
@@ -66,7 +74,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
 export async function DELETE(_request: Request, { params }: Params) {
   return route(async () => {
-    await requireUser();
+    await requireAdmin();
     const id = assertUuid(params.id, "Employee id");
 
     const supabase = createSupabaseServerClient();
@@ -81,12 +89,7 @@ export async function DELETE(_request: Request, { params }: Params) {
       .maybeSingle();
 
     if (error) throw new ApiError(400, error.message);
-    if (!data) {
-      throw new ApiError(
-        403,
-        "Only the person who added this employee can remove them from the directory.",
-      );
-    }
+    if (!data) throw new ApiError(404, "That person is not in the resource pool.");
 
     return json({ deleted: id });
   });

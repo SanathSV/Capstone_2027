@@ -7,11 +7,15 @@
 
 export type Uuid = string;
 
+/** 'admin' may manage the resource pool; 'user' may only read it. */
+export type UserRole = "user" | "admin";
+
 export interface Profile {
   id: Uuid;
   email: string;
   full_name: string | null;
   avatar_url: string | null;
+  role: UserRole;
   created_at: string;
   updated_at: string;
 }

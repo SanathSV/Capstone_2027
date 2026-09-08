@@ -97,6 +97,37 @@ export async function requireTeamAccess(teamId: string): Promise<User> {
   return user;
 }
 
+/**
+ * Proves the caller is an admin.
+ *
+ * The RLS policies enforce this independently, so this guard is not what
+ * makes the app safe — it is what makes the refusal legible. Without it a
+ * non-admin POST returns a bare policy violation from PostgREST; with it they
+ * get a sentence naming the reason and who can fix it.
+ */
+export async function requireAdmin(): Promise<User> {
+  const user = await requireUser();
+  const supabase = createSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const problem = dbError("read your profile", "authenticated", error);
+  if (problem) throw problem;
+
+  if (data?.role !== "admin") {
+    throw new ApiError(
+      403,
+      "Only an admin can change the resource pool. Ask whoever administers " +
+        "Astra to add this person, or to make you an admin.",
+    );
+  }
+  return user;
+}
+
 /** Body parsing that fails loudly instead of yielding `undefined` fields. */
 export async function readJson<T>(request: Request): Promise<T> {
   try {

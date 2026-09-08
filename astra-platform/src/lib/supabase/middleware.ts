@@ -43,6 +43,10 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic =
     pathname === "/login" ||
+    // Reachable signed-out on purpose: an expired recovery link lands here with
+    // no session, and the page explains that far better than a silent bounce to
+    // the login form would.
+    pathname === "/reset-password" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";

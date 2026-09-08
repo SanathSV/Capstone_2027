@@ -29,6 +29,7 @@ drop function if exists public.handle_new_user()        cascade;
 drop function if exists public.link_employee_profile()  cascade;
 drop function if exists public.register_team_leader()   cascade;
 drop function if exists public.touch_updated_at()       cascade;
+drop function if exists private.is_admin()              cascade;
 drop function if exists private.is_team_leader(uuid)    cascade;
 drop function if exists private.is_team_member(uuid)    cascade;
 
@@ -42,6 +43,16 @@ create table public.profiles (
   email      text not null,
   full_name  text,
   avatar_url text,
+  -- Who may change the company directory.
+  --
+  --   'user'   the default. Reads the resource pool, leads and joins teams,
+  --            generates pre-context. Cannot add, edit or remove people.
+  --   'admin'  everything a user can do, plus managing the resource pool.
+  --
+  -- Two values rather than a permissions table because there is exactly one
+  -- privileged action in the product. A check constraint keeps the column
+  -- honest; widening it later is one ALTER away.
+  role       text not null default 'user' check (role in ('user', 'admin')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -49,6 +60,9 @@ create table public.profiles (
 -- Case-insensitive uniqueness: Google hands back "Sam@x.com" and "sam@x.com"
 -- for the same human, and the employee <-> profile link matches on lower(email).
 create unique index profiles_email_lower_key on public.profiles (lower(email));
+-- private.is_admin() runs on every directory write; this keeps it an index
+-- lookup rather than a scan once the profile table grows.
+create index profiles_admin_idx on public.profiles (id) where role = 'admin';
 
 comment on table public.profiles is
   'Astra users. Created automatically when someone signs up via Supabase Auth.';
@@ -220,8 +234,18 @@ language plpgsql
 security definer
 set search_path = ''
 as $fn$
+declare
+  v_role text;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url)
+  -- Bootstrapping: the very first person to sign up becomes the admin.
+  -- Without this nobody could ever add anyone to the resource pool, and the
+  -- app would arrive unusable with no way out except hand-editing SQL.
+  -- Everyone after them is a plain user; promote others deliberately with
+  -- the statement at the bottom of this file.
+  select case when exists (select 1 from public.profiles) then 'user' else 'admin' end
+    into v_role;
+
+  insert into public.profiles (id, email, full_name, avatar_url, role)
   values (
     new.id,
     new.email,
@@ -230,7 +254,8 @@ begin
       nullif(btrim(new.raw_user_meta_data ->> 'name'), ''),
       split_part(new.email, '@', 1)
     ),
-    new.raw_user_meta_data ->> 'avatar_url'
+    new.raw_user_meta_data ->> 'avatar_url',
+    v_role
   )
   on conflict (id) do nothing;
 
@@ -334,6 +359,23 @@ create trigger teams_register_leader
 -- passing someone else's team id tells you nothing you were not already
 -- allowed to know.
 
+-- Is the caller an admin? SECURITY DEFINER so it can read `profiles` without
+-- depending on that table's own policies, and it only ever asks about the
+-- calling user, so it cannot be used to probe anyone else's role.
+create or replace function private.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = ''
+as $fn$
+  select exists (
+    select 1 from public.profiles p
+     where p.id = (select auth.uid())
+       and p.role = 'admin'
+  );
+$fn$;
+
 create or replace function private.is_team_leader(p_team_id uuid)
 returns boolean
 language sql
@@ -370,9 +412,11 @@ $fn$;
 
 -- Nobody may call these directly through the API; `authenticated` needs EXECUTE
 -- only because RLS policy expressions are evaluated as the querying role.
+revoke execute on function private.is_admin()           from public, anon;
 revoke execute on function private.is_team_leader(uuid) from public, anon;
 revoke execute on function private.is_team_member(uuid) from public, anon;
 grant usage on schema private to authenticated;
+grant execute on function private.is_admin()           to authenticated;
 grant execute on function private.is_team_leader(uuid) to authenticated;
 grant execute on function private.is_team_member(uuid) to authenticated;
 
@@ -407,19 +451,30 @@ create policy profiles_update_self on public.profiles
 create policy employees_select_authenticated on public.employees
   for select to authenticated using (true);
 
-create policy employees_insert_authenticated on public.employees
+-- Writing to the directory is an ADMIN action. Everyone can read it -- team
+-- creation and the roster pickers depend on that -- but only an admin adds,
+-- edits or removes a person.
+--
+-- Enforced here rather than only in the UI: hiding a button stops the honest
+-- mistake, a policy stops a hand-written fetch() from the browser console.
+create policy employees_insert_admin on public.employees
   for insert to authenticated
-  with check (created_by = (select auth.uid()));
+  with check (
+    (select private.is_admin())
+    and created_by = (select auth.uid())
+  );
 
-create policy employees_update_authenticated on public.employees
+-- Editing is gated the same way. A directory nobody may add to, but anybody
+-- may rewrite, is not actually controlled: changing someone's GitHub handle
+-- silently redirects whose commits show up in that team's pre-context.
+create policy employees_update_admin on public.employees
   for update to authenticated
-  using ((select auth.uid()) is not null)
-  with check ((select auth.uid()) is not null);
+  using ((select private.is_admin()))
+  with check ((select private.is_admin()));
 
--- Deleting a directory entry is destructive (it cascades into every team's
--- roster), so it stays with whoever added the person.
-create policy employees_delete_own on public.employees
-  for delete to authenticated using (created_by = (select auth.uid()));
+-- Deleting cascades into every team's roster, so it is admin-only too.
+create policy employees_delete_admin on public.employees
+  for delete to authenticated using ((select private.is_admin()));
 
 -- --- teams ------------------------------------------------------------------
 create policy teams_select_visible on public.teams
@@ -498,3 +553,20 @@ grant all privileges
 -- future `generated always as identity` column would fail for these roles
 -- without this, in a way that is tedious to diagnose.
 grant usage, select on all sequences in schema public to authenticated, service_role;
+
+-- ===========================================================================
+-- 11. Roles
+-- ===========================================================================
+-- The first account to sign up is made an admin automatically (see
+-- handle_new_user above). To promote or demote anyone else, run:
+--
+--   update public.profiles set role = 'admin' where lower(email) = 'someone@company.com';
+--   update public.profiles set role = 'user'  where lower(email) = 'someone@company.com';
+--
+-- To see who currently holds it:
+--
+--   select email, role, created_at from public.profiles order by role, email;
+--
+-- There is deliberately no UI for this. Granting the ability to edit the
+-- cross-walk is the one action in Astra that changes what every team's bot
+-- is told, so it is a decision someone makes at the database, on purpose.

@@ -14,7 +14,7 @@ import { AstraMark } from "@/components/Shell";
  * profile row — the `on_auth_user_created` trigger does not care how you got in.
  */
 
-type Mode = "signin" | "signup" | "magic";
+type Mode = "signin" | "signup" | "magic" | "reset";
 
 export function LoginForm() {
   const router = useRouter();
@@ -22,11 +22,15 @@ export function LoginForm() {
   const next = params.get("next") || "/dashboard";
 
   const [mode, setMode] = useState<Mode>("signin");
+  // /auth/callback bounces here with ?error= when a magic link or a recovery
+  // link has expired or already been used. Without this the user is returned to
+  // a blank form with no idea why.
+  const callbackError = params.get("error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(callbackError);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
@@ -47,6 +51,19 @@ export function LoginForm() {
         });
         if (error) throw error;
         setNotice("Check your inbox — the sign-in link is on its way.");
+        return;
+      }
+
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          // The link lands on the callback, which swaps the one-time code for a
+          // session and forwards to the page that actually sets the password.
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+        });
+        if (error) throw error;
+        setNotice(
+          "If that email has an account, a reset link is on its way. The link is single-use and expires in an hour.",
+        );
         return;
       }
 
@@ -96,6 +113,15 @@ export function LoginForm() {
         </div>
 
         <form onSubmit={submit} className="card space-y-4 p-6">
+          {mode === "reset" ? (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-white">Reset your password</h2>
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                Enter the email you signed up with and we will send a single-use link.
+                Opening it signs you in just long enough to choose a new password.
+              </p>
+            </div>
+          ) : (
           <div className="flex rounded-lg border border-ink-700 bg-ink-900 p-1 text-xs">
             {(
               [
@@ -122,6 +148,7 @@ export function LoginForm() {
               </button>
             ))}
           </div>
+          )}
 
           {mode === "signup" && (
             <div>
@@ -155,11 +182,26 @@ export function LoginForm() {
             />
           </div>
 
-          {mode !== "magic" && (
+          {mode !== "magic" && mode !== "reset" && (
             <div>
-              <label className="label" htmlFor="password">
-                Password
-              </label>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <label className="label mb-0" htmlFor="password">
+                  Password
+                </label>
+                {mode === "signin" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("reset");
+                      setError(null);
+                      setNotice(null);
+                    }}
+                    className="text-[11px] text-astra-400 transition hover:text-astra-300"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <input
                 id="password"
                 type="password"
@@ -185,6 +227,18 @@ export function LoginForm() {
             </p>
           )}
 
+          {/* Both of these send mail, and Supabase's built-in sender allows
+              only two messages an hour for the whole project. Saying so here
+              turns "the email never arrived" from a mystery into a known cost. */}
+          {(mode === "magic" || mode === "reset") && (
+            <p className="rounded-lg border border-ink-700 bg-ink-900/60 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+              This sends mail through Supabase&rsquo;s built-in service, which allows only{" "}
+              <strong className="text-slate-400">2 emails per hour</strong> for the whole
+              project. If nothing arrives, that budget is usually why — raise it by
+              configuring custom SMTP under Authentication &rarr; Emails.
+            </p>
+          )}
+
           <button type="submit" disabled={busy} className="btn-primary w-full">
             {busy
               ? "Working…"
@@ -192,12 +246,30 @@ export function LoginForm() {
                 ? "Create account"
                 : mode === "magic"
                   ? "Email me a link"
-                  : "Sign in"}
+                  : mode === "reset"
+                    ? "Send the reset link"
+                    : "Sign in"}
           </button>
 
-          <p className="text-center text-[11px] leading-relaxed text-slate-600">
-            Your account becomes the Team Leader of any team you create.
-          </p>
+          {mode === "reset" && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setError(null);
+                setNotice(null);
+              }}
+              className="w-full text-center text-[11px] text-slate-500 transition hover:text-slate-300"
+            >
+              ← Back to sign in
+            </button>
+          )}
+
+          {mode !== "reset" && (
+            <p className="text-center text-[11px] leading-relaxed text-slate-600">
+              Your account becomes the Team Leader of any team you create.
+            </p>
+          )}
         </form>
       </div>
     </div>

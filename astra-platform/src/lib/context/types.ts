@@ -41,6 +41,12 @@ export interface GitHubCommit {
   msg: string;
   author: string;
   at: string;
+  /**
+   * The branch this commit was first seen on, default branch first. So a commit
+   * already merged reads as "main" and unmerged work carries the branch it
+   * lives on — which is the thing someone is about to talk about in a standup.
+   */
+  branch?: string;
 }
 
 export interface GitHubContext {
@@ -55,6 +61,15 @@ export interface GitHubContext {
   window_days: number;
   /** Set when the team has GitHub handles that produced nothing in the window. */
   quiet_members?: string[];
+  /** How many branches were actually scanned, and how many exist. */
+  branches_scanned?: number;
+  branches_total?: number;
+  /**
+   * Branches with commits in the window that are not on the default branch —
+   * unmerged work in flight, newest first. The single most useful GitHub fact
+   * for a standup after the PR list.
+   */
+  active_branches?: { name: string; commits: number; authors: string[] }[];
 }
 
 export interface JiraIssue {

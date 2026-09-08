@@ -1,4 +1,12 @@
-import { ApiError, cleanString, json, readJson, requireUser, route } from "@/lib/api";
+import {
+  ApiError,
+  cleanString,
+  json,
+  readJson,
+  requireAdmin,
+  requireUser,
+  route,
+} from "@/lib/api";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateHandles } from "@/lib/validation";
 import type { Employee } from "@/lib/db/types";
@@ -38,7 +46,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   return route(async () => {
-    const user = await requireUser();
+    // Adding to the company directory is an admin action. Reading it is not:
+    // the GET above is open to every signed-in user, because team creation
+    // and the roster pickers depend on it.
+    const user = await requireAdmin();
     const body = await readJson<EmployeeBody>(request);
 
     const full_name = cleanString(body.full_name, {

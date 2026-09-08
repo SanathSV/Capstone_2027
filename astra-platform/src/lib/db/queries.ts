@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   Employee,
+  Profile,
   PreContextRun,
   Team,
   TeamMemberWithEmployee,
@@ -77,6 +78,26 @@ export async function getDashboardTeams(userId: string): Promise<{
   }
 
   return { lead, member };
+}
+
+/**
+ * The signed-in user's own profile, which is where the role lives.
+ *
+ * Pages call this to decide what to *show*; the database policies decide what
+ * is actually allowed. Both matter: without the first, a non-admin stares at a
+ * form that will always fail, and without the second the form is only a
+ * suggestion.
+ */
+export async function getMyProfile(userId: string): Promise<Profile | null> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Could not load your profile: ${error.message}`);
+  return (data as Profile) ?? null;
 }
 
 export async function getEmployees(): Promise<Employee[]> {
