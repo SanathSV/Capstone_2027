@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PreContextRun, SourceOutcome } from "@/lib/db/types";
 
@@ -18,14 +18,18 @@ interface RunResponse {
   run_id: string | null;
   generated_at: string;
   payload: {
+    // Optional on purpose. Runs generated before meta was exempted from
+    // pruning have no `truncated` key at all, and those payloads are still in
+    // pre_context_runs — so the type says what the data actually is rather
+    // than what we wish it were.
     meta: {
-      bytes: number;
-      token_estimate: number;
-      duration_ms: number;
-      sources: Record<string, SourceOutcome>;
-      truncated: string[];
+      bytes?: number;
+      token_estimate?: number;
+      duration_ms?: number;
+      sources?: Record<string, SourceOutcome>;
+      truncated?: string[];
     };
-    digest: string[];
+    digest?: string[];
     [key: string]: unknown;
   };
 }
@@ -51,6 +55,22 @@ export function PreContextPanel({
   const [error, setError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
   const [copied, setCopied] = useState(false);
+  // A harvest hits three third-party APIs with retries and can legitimately
+  // take ten seconds. Without a running clock that is indistinguishable from a
+  // hung request, and people start clicking again.
+  const [elapsed, setElapsed] = useState(0);
+  const startedAt = useRef(0);
+
+  useEffect(() => {
+    if (!busy) return;
+    startedAt.current = Date.now();
+    setElapsed(0);
+    const id = setInterval(
+      () => setElapsed(Math.floor((Date.now() - startedAt.current) / 100) / 10),
+      100,
+    );
+    return () => clearInterval(id);
+  }, [busy]);
 
   async function generate() {
     setBusy(true);
@@ -75,6 +95,13 @@ export function PreContextPanel({
   }
 
   const payloadJson = result ? JSON.stringify(result.payload, null, 2) : "";
+
+  // One place where the payload's optional shape is normalised, so the JSX
+  // below can read these without a guard on every line.
+  const meta = result?.payload.meta;
+  const digest = result?.payload.digest ?? [];
+  const trimmed = meta?.truncated ?? [];
+  const sources = meta?.sources ?? {};
 
   async function copy() {
     await navigator.clipboard.writeText(payloadJson);
@@ -112,7 +139,7 @@ export function PreContextPanel({
             {busy ? (
               <>
                 <Spinner />
-                Harvesting…
+                Harvesting… {elapsed.toFixed(1)}s
               </>
             ) : (
               "Generate Pre-Context"
@@ -122,6 +149,8 @@ export function PreContextPanel({
       </div>
 
       <div className="p-5">
+        {busy && <HarvestProgress elapsed={elapsed} />}
+
         {!isLeader && (
           <Note tone="muted">
             Only the team leader can run the context engine — it reads the team&rsquo;s
@@ -129,14 +158,14 @@ export function PreContextPanel({
           </Note>
         )}
 
-        {isLeader && memberCount === 0 && (
+        {isLeader && !busy && memberCount === 0 && (
           <Note tone="warn">
             Add people from the resource pool first. Every GitHub and Jira lookup is
             filtered by the roster&rsquo;s handles, so an empty team harvests nothing.
           </Note>
         )}
 
-        {isLeader && memberCount > 0 && !anyIntegration && !result && (
+        {isLeader && !busy && memberCount > 0 && !anyIntegration && !result && (
           <Note tone="warn">
             No integrations are configured yet, so a run right now produces the roster
             cross-walk and nothing else. That is still a valid payload — add GitHub or
@@ -144,15 +173,15 @@ export function PreContextPanel({
           </Note>
         )}
 
-        {error && <Note tone="error">{error}</Note>}
+        {!busy && error && <Note tone="error">{error}</Note>}
 
-        {result && (
+        {!busy && result && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={result.status} />
-              <Stat label="size" value={`${(result.payload.meta.bytes / 1024).toFixed(1)} KB`} />
-              <Stat label="≈tokens" value={result.payload.meta.token_estimate.toLocaleString()} />
-              <Stat label="took" value={`${result.payload.meta.duration_ms} ms`} />
+              <Stat label="size" value={`${((meta?.bytes ?? 0) / 1024).toFixed(1)} KB`} />
+              <Stat label="≈tokens" value={(meta?.token_estimate ?? 0).toLocaleString()} />
+              <Stat label="took" value={`${meta?.duration_ms ?? 0} ms`} />
               <div className="ml-auto flex gap-2">
                 <button onClick={copy} className="btn-ghost px-3 py-1.5 text-xs">
                   {copied ? "Copied" : "Copy JSON"}
@@ -163,15 +192,15 @@ export function PreContextPanel({
               </div>
             </div>
 
-            <SourceGrid sources={result.payload.meta.sources} />
+            {Object.keys(sources).length > 0 && <SourceGrid sources={sources} />}
 
-            {result.payload.digest.length > 0 && (
+            {digest.length > 0 && (
               <div className="rounded-lg border border-ink-700 bg-ink-900/60 p-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Digest
                 </h3>
                 <ul className="space-y-1.5">
-                  {result.payload.digest.map((line, i) => (
+                  {digest.map((line, i) => (
                     <li key={i} className="flex gap-2 text-xs leading-relaxed text-slate-300">
                       <span className="text-astra-500">▸</span>
                       {line}
@@ -181,13 +210,13 @@ export function PreContextPanel({
               </div>
             )}
 
-            {result.payload.meta.truncated.length > 0 && (
+            {trimmed.length > 0 && (
               <details className="rounded-lg border border-ink-700 bg-ink-900/60 p-4">
                 <summary className="cursor-pointer text-xs text-slate-400">
-                  Trimmed for the context budget ({result.payload.meta.truncated.length})
+                  Trimmed for the context budget ({trimmed.length})
                 </summary>
                 <ul className="mt-2 space-y-1">
-                  {result.payload.meta.truncated.map((line, i) => (
+                  {trimmed.map((line, i) => (
                     <li key={i} className="text-[11px] text-slate-500">
                       · {line}
                     </li>
@@ -217,7 +246,7 @@ export function PreContextPanel({
           </div>
         )}
 
-        {!result && !error && lastRun && (
+        {!busy && !result && !error && lastRun && (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700 bg-ink-900/60 px-4 py-3">
             <span className="text-xs text-slate-500">Last run</span>
             <StatusBadge status={lastRun.status} />
@@ -232,6 +261,43 @@ export function PreContextPanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * What the page shows while the three sources are being fetched.
+ *
+ * The sources are named individually even though we cannot know which one is
+ * still outstanding — the request is a single POST and the server fans out
+ * internally. Naming them is still worth it: when the run comes back partial,
+ * the same three cards are already where the eye expects them, and the failure
+ * reads as "Jira failed" rather than "the button failed".
+ */
+function HarvestProgress({ elapsed }: { elapsed: number }) {
+  return (
+    <div className="animate-fade-up space-y-4">
+      <div className="h-0.5 overflow-hidden rounded-full bg-ink-700">
+        <div className="h-full w-1/3 animate-route-progress rounded-full bg-astra-500" />
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {["github", "jira", "slack"].map((name) => (
+          <div key={name} className="shimmer rounded-lg border border-ink-700 bg-ink-900/60 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium capitalize text-slate-300">{name}</span>
+              <Spinner />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-600">querying…</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-[11px] text-slate-600">
+        {elapsed < 8
+          ? "Querying the configured integrations in parallel."
+          : "Still going — a slow Jira site or a retry after a rate limit can take a few more seconds."}
+      </p>
     </div>
   );
 }

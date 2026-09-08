@@ -468,8 +468,33 @@ create policy pre_context_runs_insert_leader on public.pre_context_runs
 -- ===========================================================================
 -- 10. Grants (PostgREST checks table privileges before RLS is ever consulted)
 -- ===========================================================================
-grant usage on schema public to anon, authenticated;
+-- PostgREST resolves the API key to a Postgres role and runs the query as that
+-- role, so a missing GRANT fails with "permission denied for schema public"
+-- long before any policy is considered. Three roles need naming:
+--
+--   anon           the publishable/anon key, signed-out visitors
+--   authenticated  the publishable/anon key once a session exists — the app
+--   service_role   the secret/service_role key — the pre-context engine only
+--
+-- service_role matters even though it bypasses RLS: bypassing row *policies*
+-- is not the same as holding table *privileges*, and these tables were dropped
+-- and recreated by this script, so whatever the project was set up with does
+-- not necessarily carry over.
+grant usage on schema public to anon, authenticated, service_role;
+
 grant select, insert, update, delete
   on public.profiles, public.employees, public.teams,
      public.team_members, public.team_integrations, public.pre_context_runs
   to authenticated;
+
+-- The engine reads team_integrations and writes pre_context_runs with this
+-- role, after the caller's own session has already proved they lead the team.
+grant all privileges
+  on public.profiles, public.employees, public.teams,
+     public.team_members, public.team_integrations, public.pre_context_runs
+  to service_role;
+
+-- Sequences: none of the tables use one today (every key is a uuid), but a
+-- future `generated always as identity` column would fail for these roles
+-- without this, in a way that is tedious to diagnose.
+grant usage, select on all sequences in schema public to authenticated, service_role;

@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Shell } from "@/components/Shell";
+import { ProgressLink } from "@/components/Navigation";
 import { RosterEditor } from "@/components/RosterEditor";
 import { IntegrationsForm } from "@/components/IntegrationsForm";
 import { PreContextPanel, StatusBadge } from "@/components/PreContextPanel";
@@ -48,11 +47,11 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
   );
 
   return (
-    <Shell email={user.email ?? ""}>
+    <>
       <div className="mb-6">
-        <Link href="/dashboard" className="text-xs text-slate-500 hover:text-slate-300">
+        <ProgressLink href="/dashboard" className="text-xs text-slate-500 hover:text-slate-300">
           ← Teams
-        </Link>
+        </ProgressLink>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -112,7 +111,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
         {runs.length > 0 && <RunHistory runs={runs} />}
       </div>
-    </Shell>
+    </>
   );
 }
 

@@ -70,7 +70,8 @@ export async function requireTeamLeader(teamId: string): Promise<User> {
     .eq("id", teamId)
     .maybeSingle();
 
-  if (error) throw new ApiError(500, error.message);
+  const problem = dbError("check team leadership", "authenticated", error);
+  if (problem) throw problem;
   // RLS already hid teams the user cannot see, so "not found" and "not yours"
   // are deliberately the same answer: no team-id oracle.
   if (!data) throw new ApiError(404, "Team not found.");
@@ -132,4 +133,40 @@ export function cleanString(
     throw new ApiError(400, `${field} must be ${max} characters or fewer.`);
   }
   return trimmed;
+}
+
+/**
+ * Turns a Supabase/PostgREST error into something the person reading it can
+ * act on, tagged with which database role was being used.
+ *
+ * `permission denied for schema public` is the motivating case: it is a GRANT
+ * problem, it says nothing about which of the three roles lacked the grant, and
+ * it looks identical whether it came from the user's own session or from the
+ * service-role client. Naming the role turns a ten-minute hunt into a one-line
+ * answer.
+ */
+export function dbError(
+  step: string,
+  role: "authenticated" | "service_role",
+  error: { message: string; code?: string } | null,
+): ApiError | null {
+  if (!error) return null;
+
+  // 42501 = insufficient_privilege. 3F000 = invalid_schema_name, which PostgREST
+  // also returns when the role cannot see the schema at all.
+  if (error.code === "42501" || /permission denied/i.test(error.message)) {
+    return new ApiError(
+      500,
+      `The database refused the "${step}" step for the ${role} role ` +
+        `(${error.message}). This is a missing GRANT, not a policy problem — ` +
+        "run supabase/fix-grants.sql in the Supabase SQL Editor.",
+      { step, role, code: error.code ?? null },
+    );
+  }
+
+  return new ApiError(500, `${step} failed: ${error.message}`, {
+    step,
+    role,
+    code: error.code ?? null,
+  });
 }

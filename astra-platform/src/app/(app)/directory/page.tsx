@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Shell } from "@/components/Shell";
 import { DirectoryManager } from "@/components/DirectoryManager";
 import { getEmployees } from "@/lib/db/queries";
 import { getSessionUser } from "@/lib/supabase/server";
@@ -19,7 +18,7 @@ export default async function DirectoryPage() {
   const employees = await getEmployees();
 
   return (
-    <Shell email={user.email ?? ""}>
+    <>
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-white">Resource Pool</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-500">
@@ -30,6 +29,6 @@ export default async function DirectoryPage() {
       </div>
 
       <DirectoryManager employees={employees} currentUserId={user.id} />
-    </Shell>
+    </>
   );
 }

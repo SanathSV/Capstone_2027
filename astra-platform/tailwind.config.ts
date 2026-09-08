@@ -42,8 +42,22 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        // An indeterminate bar: it sweeps rather than fills, because we have no
+        // idea how long a route or a three-API harvest is going to take, and a
+        // progress bar that claims to know is a lie the user notices.
+        "route-progress": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
       },
-      animation: { "fade-up": "fade-up 200ms ease-out both" },
+      animation: {
+        "fade-up": "fade-up 200ms ease-out both",
+        "route-progress": "route-progress 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        shimmer: "shimmer 1.6s infinite",
+      },
     },
   },
   plugins: [],

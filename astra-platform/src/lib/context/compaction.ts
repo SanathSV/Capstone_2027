@@ -51,6 +51,11 @@ export function estimateTokens(serialised: string): number {
  *
  * `"reviews": null` costs tokens and teaches the model nothing; an absent key
  * says the same thing for free.
+ *
+ * NOTE: do not run this over the `meta` block. There, an empty array is the
+ * message — `truncated: []` means "nothing was dropped" — and consumers read
+ * `meta.truncated.length` directly. `generatePreContext` reattaches the
+ * original meta after pruning for exactly this reason.
  */
 export function prune<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -118,6 +123,12 @@ export function enforceBudget(payload: PreContextPayload): PreContextPayload {
       },
     },
   ];
+
+  // Defensive: a payload assembled by something other than generatePreContext
+  // (a replay of a stored run, say) may not carry the array we push into.
+  if (!Array.isArray(payload.meta?.truncated)) {
+    payload.meta = { ...payload.meta, truncated: [] };
+  }
 
   let guard = 12; // every step shrinks or reports false, but never loop forever
   while (size() > LIMITS.maxBytes && guard-- > 0) {

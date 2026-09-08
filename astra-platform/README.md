@@ -588,11 +588,36 @@ create policy pre_context_runs_insert_leader on public.pre_context_runs
 -- ===========================================================================
 -- 10. Grants (PostgREST checks table privileges before RLS is ever consulted)
 -- ===========================================================================
-grant usage on schema public to anon, authenticated;
+-- PostgREST resolves the API key to a Postgres role and runs the query as that
+-- role, so a missing GRANT fails with "permission denied for schema public"
+-- long before any policy is considered. Three roles need naming:
+--
+--   anon           the publishable/anon key, signed-out visitors
+--   authenticated  the publishable/anon key once a session exists — the app
+--   service_role   the secret/service_role key — the pre-context engine only
+--
+-- service_role matters even though it bypasses RLS: bypassing row *policies*
+-- is not the same as holding table *privileges*, and these tables were dropped
+-- and recreated by this script, so whatever the project was set up with does
+-- not necessarily carry over.
+grant usage on schema public to anon, authenticated, service_role;
+
 grant select, insert, update, delete
   on public.profiles, public.employees, public.teams,
      public.team_members, public.team_integrations, public.pre_context_runs
   to authenticated;
+
+-- The engine reads team_integrations and writes pre_context_runs with this
+-- role, after the caller's own session has already proved they lead the team.
+grant all privileges
+  on public.profiles, public.employees, public.teams,
+     public.team_members, public.team_integrations, public.pre_context_runs
+  to service_role;
+
+-- Sequences: none of the tables use one today (every key is a uuid), but a
+-- future `generated always as identity` column would fail for these roles
+-- without this, in a way that is tedious to diagnose.
+grant usage, select on all sequences in schema public to authenticated, service_role;
 ```
 
 ### Verifying it took
@@ -723,9 +748,9 @@ read.
 
 | Variable | Where it comes from | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API | Safe in the browser. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same page | Safe in the browser — RLS is what protects the data. |
-| `SUPABASE_SERVICE_ROLE_KEY` | same page, "service_role" | **Server only.** Bypasses every RLS policy. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → Data API | The **bare origin**, `https://abc.supabase.co` — *not* the "RESTful endpoint" ending in `/rest/v1`. supabase-js appends its own paths. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Settings → API Keys | `sb_publishable_…` or the legacy `anon` JWT; either works. Safe in the browser — RLS is what protects the data. |
+| `SUPABASE_SERVICE_ROLE_KEY` | same page | `sb_secret_…` or the legacy `service_role` JWT. **Server only.** Bypasses every RLS policy. |
 | `ASTRA_ENCRYPTION_KEY` | `npm run keygen` | 32 random bytes, base64. Encrypts the stored tokens. |
 | `NEXT_PUBLIC_SITE_URL` | you | Used to build the auth redirect URL. |
 
@@ -955,6 +980,21 @@ forged request fails twice.
 Errors are uniform: `{ "error": "a sentence you can act on", "detail": null }`
 with a real status code. Unexpected failures log server-side and return a
 generic 500 — database internals do not travel to the browser.
+
+---
+
+## If something is denied
+
+`permission denied for schema public` when you press **Generate Pre-Context**,
+while the rest of the app works: the `service_role` grants are missing. That
+button is the only thing that uses the service-role key, so it is the only thing
+that fails. Run [`supabase/fix-grants.sql`](supabase/fix-grants.sql) — it is
+additive and touches no data.
+
+The same file's first query prints what each of `anon`, `authenticated` and
+`service_role` can actually do, which is the quickest way to tell a privilege
+problem (fails for everyone, same way) from an RLS problem (works for the leader,
+returns nothing for everyone else).
 
 ---
 

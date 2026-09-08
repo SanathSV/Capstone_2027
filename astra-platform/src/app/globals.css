@@ -67,8 +67,11 @@ body {
   }
 
   .btn {
+    /* active:scale is the cheapest possible "I registered your click": it lands
+       on the same frame as the press, long before any network round trip. */
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
-           transition disabled:cursor-not-allowed disabled:opacity-50;
+           transition active:scale-[0.98] disabled:cursor-not-allowed
+           disabled:opacity-50 disabled:active:scale-100;
   }
 
   .btn-primary {
@@ -91,5 +94,35 @@ body {
 
   .mono {
     @apply font-mono text-[11px] leading-relaxed;
+  }
+
+  /* Anything that navigates gets the same press feedback as a button. */
+  .pressable {
+    @apply transition active:scale-[0.99];
+  }
+
+  /* A shimmer sweep for placeholders that stand in for text rather than blocks. */
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+  .shimmer::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r
+           from-transparent via-white/5 to-transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Skeletons and progress bars are the only motion in the app; honour the
+     preference by holding them still rather than removing the affordance. */
+  .animate-pulse,
+  .animate-shimmer,
+  .animate-route-progress,
+  .animate-fade-up {
+    animation: none !important;
+  }
+  .btn,
+  .pressable {
+    transform: none !important;
   }
 }

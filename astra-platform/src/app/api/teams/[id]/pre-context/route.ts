@@ -1,4 +1,4 @@
-import { ApiError, assertUuid, json, requireTeamLeader, route } from "@/lib/api";
+import { ApiError, assertUuid, dbError, json, requireTeamLeader, route } from "@/lib/api";
 import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
@@ -55,7 +55,8 @@ export async function POST(_request: Request, { params }: Params) {
           .order("is_lead", { ascending: false }),
       ]);
 
-    if (memberError) throw new ApiError(500, memberError.message);
+    const rosterProblem = dbError("read the roster", "authenticated", memberError);
+    if (rosterProblem) throw rosterProblem;
     const team = teamRow as Team;
     const members = (memberRows ?? []) as unknown as TeamMemberWithEmployee[];
 
@@ -76,7 +77,10 @@ export async function POST(_request: Request, { params }: Params) {
       .eq("team_id", teamId)
       .maybeSingle();
 
-    if (intError) throw new ApiError(500, intError.message);
+    // The most likely failure in a fresh project: service_role was never
+    // granted anything, and this is the only route that uses it.
+    const credsProblem = dbError("read team_integrations", "service_role", intError);
+    if (credsProblem) throw credsProblem;
     const stored = (intRow as TeamIntegrations | null) ?? null;
 
     let credentials: TeamIntegrationsPlain;
@@ -138,7 +142,12 @@ export async function POST(_request: Request, { params }: Params) {
       .single();
 
     // The payload is the product; failing to log it must not fail the request.
-    if (runError) console.error("[astra:precontext] could not log run:", runError.message);
+    if (runError) {
+      console.error(
+        "[astra:precontext] could not log the run (the payload above is still valid):",
+        runError.message,
+      );
+    }
 
     return json({
       status,

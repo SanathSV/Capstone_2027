@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Shell } from "@/components/Shell";
+import { ProgressLink } from "@/components/Navigation";
 import { CreateTeamWizard } from "@/components/CreateTeamWizard";
 import { getEmployees } from "@/lib/db/queries";
 import { getSessionUser } from "@/lib/supabase/server";
@@ -14,11 +13,11 @@ export default async function NewTeamPage() {
   const employees = await getEmployees();
 
   return (
-    <Shell email={user.email ?? ""}>
+    <>
       <div className="mb-6">
-        <Link href="/dashboard" className="text-xs text-slate-500 hover:text-slate-300">
+        <ProgressLink href="/dashboard" className="text-xs text-slate-500 hover:text-slate-300">
           ← Teams
-        </Link>
+        </ProgressLink>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
           New team
         </h1>
@@ -28,6 +27,6 @@ export default async function NewTeamPage() {
       </div>
 
       <CreateTeamWizard employees={employees} />
-    </Shell>
+    </>
   );
 }

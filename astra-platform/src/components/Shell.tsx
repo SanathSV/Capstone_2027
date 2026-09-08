@@ -1,9 +1,20 @@
-import Link from "next/link";
+"use client";
+
+import { usePathname } from "next/navigation";
 import { SignOutButton } from "./SignOutButton";
+import {
+  NavigationProgress,
+  NavigationProvider,
+  ProgressLink,
+} from "./Navigation";
 
 /**
- * The frame every signed-in page sits in: brand, primary nav, and who you are.
- * A server component — nothing here needs interactivity except sign-out.
+ * The frame every signed-in page sits in: brand, nav, and who you are.
+ *
+ * Rendered once by `(app)/layout.tsx` and kept mounted across navigations, so
+ * clicking a link swaps only the content beneath it. The progress bar lives in
+ * the header for the same reason — it has to outlive the page it is reporting
+ * on.
  */
 
 const NAV = [
@@ -19,35 +30,59 @@ export function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-950/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6">
-          <Link href="/dashboard" className="flex items-center gap-2.5">
-            <AstraMark />
-            <span className="text-sm font-semibold tracking-wide text-white">ASTRA</span>
-          </Link>
+    <NavigationProvider>
+      <div className="min-h-screen">
+        <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-950/80 backdrop-blur-md">
+          <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6">
+            <ProgressLink href="/dashboard" className="flex items-center gap-2.5">
+              <AstraMark />
+              <span className="text-sm font-semibold tracking-wide text-white">ASTRA</span>
+            </ProgressLink>
 
-          <nav className="flex items-center gap-1">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-lg px-3 py-1.5 text-sm text-slate-400 transition hover:bg-ink-800 hover:text-white"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+            <NavLinks />
 
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden text-xs text-slate-500 sm:block">{email}</span>
-            <SignOutButton />
+            <div className="ml-auto flex items-center gap-3">
+              <span className="hidden text-xs text-slate-500 sm:block">{email}</span>
+              <SignOutButton />
+            </div>
           </div>
-        </div>
-      </header>
+          <NavigationProgress />
+        </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
-    </div>
+        <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      </div>
+    </NavigationProvider>
+  );
+}
+
+/**
+ * The current section is marked, and the one you just clicked shows a spinner.
+ * Without the first you lose your place; without the second a slow page looks
+ * like a dead link.
+ */
+function NavLinks() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="flex items-center gap-1">
+      {NAV.map((item) => {
+        const active = pathname.startsWith(item.href);
+        return (
+          <ProgressLink
+            key={item.href}
+            href={item.href}
+            spinnerClassName="h-3 w-3"
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition ${
+              active
+                ? "bg-ink-800 text-white"
+                : "text-slate-400 hover:bg-ink-800/60 hover:text-white"
+            }`}
+          >
+            {item.label}
+          </ProgressLink>
+        );
+      })}
+    </nav>
   );
 }
 

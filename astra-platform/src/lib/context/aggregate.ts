@@ -238,11 +238,20 @@ export async function generatePreContext(
     },
   };
 
-  payload.digest = buildDigest(payload);
+  // Always at least one line (the team header), so this never prunes away —
+  // but be explicit rather than relying on buildDigest never returning [].
+  payload.digest = buildDigest(payload) ?? [];
 
   // Prune, then budget, then measure — measuring before the shrink would report
   // a size the container never sees.
+  //
+  // `meta` is deliberately exempt from pruning and put back whole. Everywhere
+  // else an empty array means "nothing to say" and dropping the key saves
+  // tokens, but in meta the empty array IS the statement: `truncated: []` means
+  // "nothing was dropped", and both the UI and enforceBudget index into it.
+  // Letting prune eat it turned a clean run into a TypeError.
   const pruned = prune(payload);
+  pruned.meta = payload.meta;
   const budgeted = enforceBudget(pruned);
   const serialised = JSON.stringify(budgeted);
   budgeted.meta.bytes = Buffer.byteLength(serialised, "utf8");

@@ -1,16 +1,19 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Shell } from "@/components/Shell";
 import { Empty } from "@/components/Empty";
+import { ProgressLink } from "@/components/Navigation";
+import { TeamCard } from "@/components/TeamCard";
 import { getDashboardTeams } from "@/lib/db/queries";
 import { getSessionUser } from "@/lib/supabase/server";
-import type { TeamSummary } from "@/lib/db/types";
 
 /**
  * Teams overview.
  *
  * The two sections are a partition of what RLS returned, so a team appears in
  * exactly one of them: you either lead it or you are on it.
+ *
+ * A server component: the query runs on the server and only rows the policies
+ * allow ever reach the browser. The cards are client components purely for
+ * their pending state, and receive plain data.
  */
 
 export const dynamic = "force-dynamic";
@@ -22,7 +25,7 @@ export default async function DashboardPage() {
   const { lead, member } = await getDashboardTeams(user.id);
 
   return (
-    <Shell email={user.email ?? ""}>
+    <>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-white">Teams</h1>
@@ -31,10 +34,10 @@ export default async function DashboardPage() {
             and generate the bot&rsquo;s pre-context.
           </p>
         </div>
-        <Link href="/teams/new" className="btn-primary">
+        <ProgressLink href="/teams/new" className="btn-primary" spinnerClassName="h-4 w-4">
           <PlusIcon />
           New team
-        </Link>
+        </ProgressLink>
       </div>
 
       <section className="mb-10">
@@ -77,7 +80,7 @@ export default async function DashboardPage() {
           </div>
         )}
       </section>
-    </Shell>
+    </>
   );
 }
 
@@ -105,66 +108,10 @@ function SectionHeading({
   );
 }
 
-function TeamCard({ team }: { team: TeamSummary }) {
-  return (
-    <Link
-      href={`/teams/${team.id}`}
-      className="card group flex flex-col gap-3 p-5 transition hover:border-astra-500/50 hover:bg-ink-800/80"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="font-medium text-white group-hover:text-astra-300">{team.name}</h3>
-        {team.i_lead ? (
-          <span className="chip border-astra-500/30 bg-astra-500/10 text-astra-300">
-            Leader
-          </span>
-        ) : (
-          team.my_role && <span className="chip">{team.my_role}</span>
-        )}
-      </div>
-
-      {team.description && (
-        <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">
-          {team.description}
-        </p>
-      )}
-
-      {team.sprint_name && (
-        <p className="flex items-center gap-1.5 text-xs text-signal-violet">
-          <SprintIcon />
-          {team.sprint_name}
-        </p>
-      )}
-
-      <div className="mt-auto flex items-center gap-3 border-t border-ink-700 pt-3 text-xs text-slate-500">
-        <span>
-          {team.member_count} member{team.member_count === 1 ? "" : "s"}
-        </span>
-        {!team.i_lead && team.leader && (
-          <>
-            <span className="text-ink-600">·</span>
-            <span className="truncate">
-              led by {team.leader.full_name ?? team.leader.email}
-            </span>
-          </>
-        )}
-      </div>
-    </Link>
-  );
-}
-
 function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function SprintIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 8v4l2.5 2.5" strokeLinecap="round" />
     </svg>
   );
 }

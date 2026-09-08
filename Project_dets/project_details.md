@@ -17,3 +17,8 @@
 ![alt text](image-7.png)
 
 -- Load balancer for Gemini API. cause 1k cant have the same API 
+
+
+---
+The existing DB ARCH :
+![alt text](image-8.png)

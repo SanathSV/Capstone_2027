@@ -89,8 +89,9 @@ export async function collectGitHub(
   windowDays = LIMITS.commitWindowDays,
 ): Promise<GitHubResult> {
   const { owner, repo } = parseRepoUrl(repoUrl);
-  const opts = { source: "GitHub", headers: headers(token) };
+  const base = { source: "GitHub", headers: headers(token) };
   const truncated: string[] = [];
+  const problems: string[] = [];
   const now = Date.now();
 
   // login (lowercased) -> roster ref, so results fold back onto real people.
@@ -101,23 +102,53 @@ export async function collectGitHub(
 
   const since = new Date(now - windowDays * 86_400_000).toISOString();
 
-  // One repo call plus two list calls. Both lists are capped by the API's own
-  // per_page ceiling, which is also roughly the point where more history stops
-  // being useful to a 15-minute standup.
-  const [repoInfo, pulls, commits] = await Promise.all([
-    fetchJson<GhRepo>(`${API}/repos/${owner}/${repo}`, opts),
+  // One repo call plus two list calls, each mapping to a different fine-grained
+  // token permission: Metadata, Pull requests, and Contents respectively.
+  //
+  // allSettled rather than all, because those permissions are granted
+  // separately and are routinely granted incompletely. A token with Contents
+  // but not Pull requests should still give the standup its commit history —
+  // losing every GitHub fact because one checkbox is unticked is a worse
+  // outcome than a payload that says which half is missing.
+  const [repoInfo, pulls, commits] = await Promise.allSettled([
+    fetchJson<GhRepo>(`${API}/repos/${owner}/${repo}`, {
+      ...base,
+      resource: "the repository",
+    }),
     fetchJson<GhPull[]>(
       `${API}/repos/${owner}/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=100`,
-      opts,
+      { ...base, resource: "the pull request list" },
     ),
     fetchJson<GhCommit[]>(
       `${API}/repos/${owner}/${repo}/commits?since=${encodeURIComponent(since)}&per_page=100`,
-      opts,
+      { ...base, resource: "the commit history" },
     ),
   ]);
 
-  const allPulls = pulls ?? [];
-  const allCommits = commits ?? [];
+  function settled<T>(
+    outcome: PromiseSettledResult<T | null>,
+    label: string,
+  ): T | null {
+    if (outcome.status === "fulfilled") return outcome.value;
+    const message =
+      outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+    problems.push(message);
+    truncated.push(`github: ${label} unavailable — ${message}`);
+    return null;
+  }
+
+  const repoData = settled(repoInfo, "repository metadata");
+  const pullData = settled(pulls, "open pull requests");
+  const commitData = settled(commits, "commit history");
+
+  // Both lists gone means the token is not usable for this repository at all.
+  // Reporting that as a GitHub failure is honest; reporting an empty repo is not.
+  if (pullData === null && commitData === null) {
+    throw new IntegrationError("GitHub", problems[problems.length - 1] ?? "GitHub failed.");
+  }
+
+  const allPulls = pullData ?? [];
+  const allCommits = commitData ?? [];
   const fetched = allPulls.length + allCommits.length;
 
   // --- open PRs, team-authored first -------------------------------------
@@ -194,22 +225,25 @@ export async function collectGitHub(
   }
 
   // Silence is itself a standup signal, so name it explicitly rather than
-  // leaving the bot to notice an absence.
-  const quiet = roster
-    .filter((p) => p.gh && !commitsByMember[p.ref])
-    .map((p) => p.ref);
+  // leaving the bot to notice an absence. Only claim it when we could actually
+  // read the history — otherwise "nobody committed" would be a lie told by a
+  // permissions error.
+  const quiet =
+    commitData === null
+      ? []
+      : roster.filter((p) => p.gh && !commitsByMember[p.ref]).map((p) => p.ref);
 
   const context: GitHubContext = {
-    repo: repoInfo?.full_name ?? `${owner}/${repo}`,
+    repo: repoData?.full_name ?? `${owner}/${repo}`,
     open_prs: openPrs,
     recent_commits: recentCommits,
     window_days: windowDays,
   };
-  if (repoInfo?.default_branch) context.default_branch = repoInfo.default_branch;
-  if (repoInfo?.description) {
-    context.description = truncate(repoInfo.description, LIMITS.descriptionChars);
+  if (repoData?.default_branch) context.default_branch = repoData.default_branch;
+  if (repoData?.description) {
+    context.description = truncate(repoData.description, LIMITS.descriptionChars);
   }
-  if (repoInfo?.language) context.language = repoInfo.language;
+  if (repoData?.language) context.language = repoData.language;
   if (Object.keys(commitsByMember).length) context.commits_by_member = commitsByMember;
   if (quiet.length) context.quiet_members = quiet;
 
