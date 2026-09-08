@@ -1,9 +1,0 @@
-__pycache__/
-*.py[cod]
-.venv/
-.env
-.profile/
-recordings/
-transcripts/
-.pytest_cache/
-.ruff_cache/
