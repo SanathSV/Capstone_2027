@@ -166,7 +166,7 @@ console.log("\nconversation protocol: greeting -> question -> confirm -> answer"
 
   // -- the happy path: question, read-back, "yes", answer ------------------
   {
-    const { detector, seen } = make();
+    const { detector, seen } = make({ confirm: true });
     detector.feed({ speaker: "Ravi", text: "hey astra" });
     detector.feed({ speaker: "Ravi", text: "why is the auth PR still open" });
     check("nothing is answered while the question is still being spoken", seen.answer.length === 0);
@@ -191,7 +191,7 @@ console.log("\nconversation protocol: greeting -> question -> confirm -> answer"
 
   // -- "no" throws it away -------------------------------------------------
   {
-    const { detector, seen } = make();
+    const { detector, seen } = make({ confirm: true });
     detector.feed({ speaker: "Mira", text: "hey astra who owns the flaky test" });
     await sleep(700);
     check("a question is read back", seen.confirm.length === 1);
@@ -208,7 +208,7 @@ console.log("\nconversation protocol: greeting -> question -> confirm -> answer"
 
   // -- no reply at all: go ahead -------------------------------------------
   {
-    const { detector, seen } = make();
+    const { detector, seen } = make({ confirm: true });
     detector.feed({ speaker: "Sam", text: "hey astra what is left in the sprint" });
     await sleep(700);
     check("read back, and waiting", seen.confirm.length === 1 && seen.answer.length === 0);
@@ -248,7 +248,7 @@ console.log("\nconversation protocol: greeting -> question -> confirm -> answer"
 
   // -- stray talk during confirmation must not answer the wrong thing ------
   {
-    const { detector, seen } = make();
+    const { detector, seen } = make({ confirm: true });
     detector.feed({ speaker: "Sam", text: "hey astra what is blocking the release" });
     await sleep(700);
     detector.feed({ speaker: "Mira", text: "sorry I was on mute a second ago" });
@@ -263,14 +263,37 @@ console.log("\nconversation protocol: greeting -> question -> confirm -> answer"
     detector.stop();
   }
 
-  // -- confirmation can be switched off ------------------------------------
+  // -- the DEFAULT path: no yes/no, straight to the answer ------------------
+  // The read-back was replaced by the answer's own opener ("Since you asked
+  // about X —"), which shows the room what was heard without making anybody
+  // say "yes" out loud to a robot mid-standup.
   {
-    const { detector, seen } = make({ confirm: false });
+    const { detector, seen } = make(); // no `confirm` — the real default
+    check("confirmation is OFF by default", detector.confirmEnabled === false);
+
+    detector.feed({ speaker: "Ravi", text: "hey astra how many PRs are open" });
+    check("the room is still greeted immediately", seen.wake.length === 1);
+
+    await sleep(700);
+    check("there is no read-back", seen.confirm.length === 0);
+    check("and the question goes straight to the model", seen.answer.length === 1);
+    check(
+      "with the query intact",
+      seen.answer[0]?.query === "how many PRs are open",
+      seen.answer[0]?.query,
+    );
+    check("marked unconfirmed, because nobody confirmed it", seen.answer[0]?.confirmed === false);
+    check("and closed by silence", seen.answer[0]?.reason === "silence", seen.answer[0]?.reason);
+    detector.stop();
+  }
+
+  // -- but it can still be switched back on --------------------------------
+  {
+    const { detector, seen } = make({ confirm: true });
     detector.feed({ speaker: "Ravi", text: "hey astra how many PRs are open" });
     await sleep(700);
-    check("with BOT_CONFIRM off there is no read-back", seen.confirm.length === 0);
-    check("and the question is answered directly", seen.answer.length === 1);
-    check("but the room is still greeted", seen.wake.length === 1);
+    check("BOT_CONFIRM=1 restores the read-back", seen.confirm.length === 1);
+    check("and it waits rather than answering", seen.answer.length === 0);
     detector.stop();
   }
 }

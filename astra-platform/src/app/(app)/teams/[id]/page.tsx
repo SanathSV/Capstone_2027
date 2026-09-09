@@ -4,6 +4,7 @@ import { RosterEditor } from "@/components/RosterEditor";
 import { IntegrationsForm } from "@/components/IntegrationsForm";
 import { PreContextPanel, StatusBadge } from "@/components/PreContextPanel";
 import { BotStatusBadge, type BadgeStatus } from "@/components/BotStatusBadge";
+import { TeamDescriptionEditor } from "@/components/TeamDescriptionEditor";
 import {
   getEmployees,
   getLeaderBotStatus,
@@ -103,11 +104,11 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                 googleEmail={badge.email}
               />
             </div>
-            {team.description && (
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                {team.description}
-              </p>
-            )}
+            <TeamDescriptionEditor
+              teamId={team.id}
+              initial={team.description}
+              canEdit={isLeader}
+            />
             {team.sprint_name && (
               <p className="mt-2 text-xs text-signal-violet">{team.sprint_name}</p>
             )}

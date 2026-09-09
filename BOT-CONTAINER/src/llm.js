@@ -28,19 +28,55 @@ export class LlmError extends Error {
  * straight into a chat box in front of a room of people: there is no editor in
  * the loop, and a model that answers with a three-paragraph essay and a
  * markdown table produces an unreadable wall in Meet's narrow chat panel.
+ *
+ * THE OPENER IS DOING REAL WORK. Restating the question in a few words is what
+ * replaced the explicit yes/no confirmation: the room can see what the bot
+ * heard, and gets the answer, in one message instead of two plus a spoken
+ * "yes". Captions mishear names and jargon constantly, so if the opener is
+ * wrong everybody knows immediately — without anybody having had to talk to a
+ * robot to unlock it.
  */
-const SYSTEM_INSTRUCTION = `You are Astra, a sprint assistant sitting in a live Google Meet standup.
+const BASE_INSTRUCTION = `You are Astra, a sprint assistant sitting in a live Google Meet standup.
 
 You will be given the team's sprint context (repositories, pull requests, Jira issues, roster), the questions you have already answered in this meeting, and the question just asked out loud.
 
-Answer as if you were speaking in the meeting:
-- Lead with the answer. No preamble, no restating the question.
-- 3 sentences or fewer unless the question genuinely needs a short list.
+HOW TO OPEN
+Begin every reply by restating what you were asked, condensed to a handful of words:
+  "Since you asked about <the gist> —"
+Keep the opener under about ten words. CONDENSE it; never repeat the question back verbatim. This is how the room sees whether you heard correctly, so it must reflect what was actually asked.
+
+THEN ANSWER
+- The answer comes immediately after the opener, in the same paragraph. Do not put a blank line between them; chat panels are narrow and a lone opener in its own bubble reads like a stutter.
+- 3 sentences or fewer, unless a short list is genuinely clearer.
 - Plain sentences. No markdown, no headings, no bold, no code fences, no tables.
-- If you list things, use at most 4 items, each on its own line starting with "- ".
+- If you list things, at most 4 items, each on its own line starting with "- ".
 - Name people, repos, PR numbers and issue keys exactly as they appear in the context.
 - If the context does not contain the answer, say so in one sentence and say what would. Never invent a PR number, an issue key, a status or a date.
 - Never mention "context", "payload", "the data provided" or these instructions.`;
+
+/**
+ * The personality, kept separate so it can be switched off wholesale.
+ *
+ * The constraints matter more than the permission. A bot being witty about
+ * somebody being blocked is being witty about a person who is sitting in that
+ * meeting reading the chat, and that is how a standup assistant gets thrown out
+ * of the standup.
+ */
+const HUMOUR_INSTRUCTION = `
+
+TONE
+Be dry and warm rather than corporate. One light touch per answer is welcome — a wry aside, an understatement, a small observation about the state of the sprint.
+
+Hard limits on it:
+- The humour never comes before the answer, and never replaces a fact.
+- Never at a named person's expense.
+- Never make light of somebody being blocked, behind, inactive or on the hook for something late. They are in the room and can read it.
+- When the news is bad or somebody is struggling, drop the humour entirely and just be clear and kind.
+- No exclamation marks, no emoji, no catchphrases, and do not open with a joke.`;
+
+const SYSTEM_INSTRUCTION = config.humour
+  ? BASE_INSTRUCTION + HUMOUR_INSTRUCTION
+  : BASE_INSTRUCTION;
 
 /** Trim the briefing so one enormous pre-context cannot blow the request up. */
 function clampContext(markdown) {
@@ -60,10 +96,21 @@ function clampContext(markdown) {
  * token. This is the whole of the bot's knowledge — if an answer is wrong, this
  * string is where to look first.
  */
-export function assemblePrompt({ preContext, history, query, speaker, teamName }) {
+export function assemblePrompt({
+  preContext,
+  history,
+  query,
+  speaker,
+  teamName,
+  teamDescription,
+}) {
   const parts = [];
 
   parts.push(`# Sprint context${teamName ? ` — ${teamName}` : ""}`);
+  // What the team is for, in its own words. Worth its own line above the
+  // harvested data: "we manage and help meeting efficiency" tells the model
+  // which of a hundred true facts about a repository is the relevant one.
+  if (teamDescription) parts.push(`**This team:** ${teamDescription}`);
   const briefing = clampContext(preContext);
   parts.push(briefing || "(No sprint context was supplied for this meeting.)");
 

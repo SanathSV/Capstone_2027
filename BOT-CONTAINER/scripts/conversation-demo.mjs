@@ -31,7 +31,10 @@ try {
 
 console.log(`\nmodel        : ${config.geminiModel}`);
 console.log(`pre-context  : ${preContext.length} chars (~${Math.ceil(preContext.length / 4)} tokens)`);
-console.log(`confirm      : ${config.confirmEnabled ? `on, ${config.confirmTimeoutMs}ms` : "off"}`);
+console.log(
+  `confirm      : ${config.confirmEnabled ? `on, ${config.confirmTimeoutMs}ms` : "off — the answer's own opener restates the question"}`,
+);
+console.log(`humour       : ${config.humour ? "on" : "off"}`);
 console.log(`silence      : ${config.silenceMs}ms\n`);
 
 const context = new SessionContext({ preContext, teamName: "Astra_dev" });
@@ -80,13 +83,12 @@ const speak = async (speaker, text, gap = 300) => {
 };
 
 // ---------------------------------------------------------------------------
-console.log("── 1. wake, question, read-back, confirmed ───────────────────");
+console.log("── 1. wake, greeting, question, answer ──────────────────────");
 // ---------------------------------------------------------------------------
 await speak("Ravi", "so the deploy went out this morning");
 await speak("Ravi", "Hey Astra, have a look");
 await speak("Ravi", "who has the most commits this sprint");
-await sleep(1800); // silence closes the question -> read-back
-await speak("Ravi", "yes");
+await sleep(1800); // silence closes the question -> straight to the model
 await answerQueue.drain();
 
 // ---------------------------------------------------------------------------
@@ -94,22 +96,21 @@ console.log("\n── 2. a follow-up, using the in-memory context ────�
 // ---------------------------------------------------------------------------
 await speak("Mira", "hey astra is that person blocked on anything");
 await sleep(1800);
-await speak("Mira", "yeah");
 await answerQueue.drain();
 
 // ---------------------------------------------------------------------------
-console.log("\n── 3. misheard: the room says no ─────────────────────────────");
+console.log("\n── 3. a question the context cannot answer ───────────────────");
 // ---------------------------------------------------------------------------
+// The opener still restates it, so the room can see the question was heard even
+// when the answer is "I don't have that".
 await speak("Sam", "hey astra what is the flaky test situation");
 await sleep(1800);
-await speak("Sam", "no");
-await sleep(400);
+await answerQueue.drain();
 
 // ---------------------------------------------------------------------------
-console.log("\n── 4. nobody answers the read-back: go ahead anyway ──────────");
+console.log("\n── 4. a completion phrase ends the question early ────────────");
 // ---------------------------------------------------------------------------
 await speak("Sam", "hey astra what should we focus on tomorrow, that's all");
-await sleep(2600); // no yes, no no -> timeout -> answer
 await answerQueue.drain();
 
 detector.stop();

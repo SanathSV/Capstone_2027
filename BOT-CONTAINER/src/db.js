@@ -109,21 +109,21 @@ function explain(error, what) {
 export async function resolveTeam(teamId) {
   const isUuid =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teamId);
-  if (!isUuid) return { id: null, name: null, resolved: false };
+  if (!isUuid) return { id: null, name: null, description: null, resolved: false };
 
   const { data, error } = await supabase()
     .from("teams")
-    .select("id, name")
+    .select("id, name, description")
     .eq("id", teamId)
     .maybeSingle();
 
   if (error) {
     // A lookup failure must not stop a meeting starting.
     log.warn(`could not resolve team ${teamId}`, error.message);
-    return { id: null, name: null, resolved: false };
+    return { id: null, name: null, description: null, resolved: false };
   }
-  if (!data) return { id: null, name: null, resolved: false };
-  return { id: data.id, name: data.name, resolved: true };
+  if (!data) return { id: null, name: null, description: null, resolved: false };
+  return { id: data.id, name: data.name, description: data.description, resolved: true };
 }
 
 /**

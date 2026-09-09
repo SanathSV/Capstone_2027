@@ -139,7 +139,8 @@ five seconds instead of the whole join timeout.
 | Variable | Default | Notes |
 |---|---|---|
 | `BOT_GREETING` | `Yeah, how can I help you?` | Posted the instant the wake word is heard. |
-| `BOT_CONFIRM` | `1` | Read the question back and wait for a yes/no before calling the model. |
+| `BOT_CONFIRM` | `0` | Read the question back and wait for a spoken yes/no before calling the model. |
+| `BOT_HUMOUR` | `1` | Let the bot be dry and occasionally funny, under hard limits. |
 | `BOT_CONFIRM_TIMEOUT_MS` | `7000` | How long to wait for that yes/no. Silence means **go ahead**. |
 | `BOT_YES_WORDS` | `yes,yeah,yep,…` | Only counted on lines of 8 words or fewer. |
 | `BOT_NO_WORDS` | `no,nope,nah,…` | Checked before the yes list. |
@@ -157,10 +158,23 @@ for eight seconds while somebody talks at it is indistinguishable from one that
 did not hear, and people start the question over — which corrupts the buffer
 with two overlapping attempts at the same sentence.
 
-**Silence during confirmation means proceed, not abort.** Nobody wants to say
-"yes" out loud to a robot in a standup, so the common case has to be the free
-one. The read-back is there to catch a *wrong* reading, and a wrong reading is
-exactly what somebody will speak up about.
+**The read-back is off by default, and something better replaced it.** Making
+somebody say "yes" out loud to a robot, mid-standup, to unlock an answer is a
+worse cure than the disease. Instead the answer *opens* by restating the
+question in a handful of words:
+
+> **Since you asked about who has the most commits —** Sanath leads the sprint
+> with 6 commits on the Sanath_Dev branch, followed by Souriesh with 4. Not that
+> anyone is counting, except for the log.
+
+The room still sees exactly what was heard — so a misheard question is obvious
+immediately — but it arrives *with* the answer instead of instead of it.
+`BOT_CONFIRM=1` brings the explicit yes/no back for a noisy room.
+
+**On the humour.** The constraints matter more than the permission: it never
+comes before the answer, never replaces a fact, never lands on a named person,
+and is dropped entirely when somebody is blocked, behind or struggling — they
+are in that room reading the chat. `BOT_HUMOUR=0` turns it off wholesale.
 
 **"no" is checked before "yes".** "No, that's wrong" contains a phrase from both
 lists, and a mistaken yes costs far more than a mistaken no. Only short lines are

@@ -188,7 +188,12 @@ app.post("/api/start-bot", async (request, response) => {
     message: `Astra is joining ${summon.meetLink}.`,
     session_id: session.id,
     meeting: { id: session.meeting.id, number: session.meeting.meeting_number },
-    team: { id: session.team.id, ref: session.team.ref, name: session.team.name },
+    team: {
+      id: session.team.id,
+      ref: session.team.ref,
+      name: session.team.name,
+      description: session.team.description,
+    },
     poll: `/api/sessions/${session.id}`,
   });
 });

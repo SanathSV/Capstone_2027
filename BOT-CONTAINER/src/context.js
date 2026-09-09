@@ -28,10 +28,17 @@ import { config } from "./config.js";
  */
 
 export class SessionContext {
-  constructor({ preContext = "", teamName = null, maxTurns = config.maxContextTurns } = {}) {
+  constructor({
+    preContext = "",
+    teamName = null,
+    teamDescription = null,
+    maxTurns = config.maxContextTurns,
+  } = {}) {
     /** Static briefing from the summon payload. Never mutated. */
     this.preContext = preContext;
     this.teamName = teamName;
+    /** What the team is FOR, in its own words. Steers answers noticeably. */
+    this.teamDescription = teamDescription;
     this.maxTurns = Math.max(1, maxTurns);
     /** [{ query, response, speaker, at }] — oldest first. */
     this.turns = [];

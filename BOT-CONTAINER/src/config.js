@@ -168,13 +168,32 @@ export const config = {
   greeting: str("BOT_GREETING", "Yeah, how can I help you?"),
 
   /**
+   * Let the bot be dry and occasionally funny.
+   *
+   * Constrained rather than free rein: the humour never precedes the answer,
+   * never lands on a named person, and is dropped entirely when the news is
+   * bad. Somebody who is blocked or behind is sitting in that room reading the
+   * chat, and a bot being witty about it is the fastest way to get it thrown
+   * out of the standup. Set BOT_HUMOUR=0 for a plain, serious assistant.
+   */
+  humour: bool("BOT_HUMOUR", true),
+
+  /**
    * Echo the question back and wait for a yes/no before spending a model call.
    *
-   * Captions mishear names and jargon constantly, and an answer to a
-   * misheard question is worse than no answer -- it is confidently wrong in
-   * front of the room. One cheap round trip catches that.
+   * OFF by default. The reason it existed was that captions mishear names and
+   * jargon, and an answer to a misheard question is confidently wrong in front
+   * of the room. That risk is real -- but making somebody say "yes" out loud to
+   * a robot, mid-standup, to unlock an answer is a worse cure than the disease.
+   *
+   * The answer now opens by restating the question in a few words ("Since you
+   * asked about the auth PR..."), which shows the room what was heard *and*
+   * answers it in one message. The check survives; the interruption does not.
+   *
+   * Set BOT_CONFIRM=1 to bring the explicit yes/no back -- worth it in a noisy
+   * room, or where a wrong answer is expensive.
    */
-  confirmEnabled: bool("BOT_CONFIRM", true),
+  confirmEnabled: bool("BOT_CONFIRM", false),
   /** How long to wait for a yes/no before going ahead anyway. */
   confirmTimeoutMs: int("BOT_CONFIRM_TIMEOUT_MS", 7_000),
   yesWords: list("BOT_YES_WORDS", [

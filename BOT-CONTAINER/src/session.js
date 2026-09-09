@@ -81,7 +81,13 @@ export class BotSession {
     this.endedAt = null;
     this.joinedAt = null;
 
-    this.team = { id: null, name: summon.teamName, ref: summon.teamId, resolved: false };
+    this.team = {
+      id: null,
+      name: summon.teamName,
+      description: summon.teamDescription,
+      ref: summon.teamId,
+      resolved: false,
+    };
     this.meeting = null;
     this.googleAccount = null;
     /** "signed_in" | "guest" | null — how the bot actually got into the room. */
@@ -183,7 +189,13 @@ export class BotSession {
       session_id: this.id,
       status: this.status,
       error: this.error,
-      team: { id: this.team.id, ref: this.team.ref, name: this.team.name, resolved: this.team.resolved },
+      team: {
+        id: this.team.id,
+        ref: this.team.ref,
+        name: this.team.name,
+        description: this.team.description,
+        resolved: this.team.resolved,
+      },
       meeting: this.meeting
         ? { id: this.meeting.id, number: this.meeting.meeting_number }
         : null,
@@ -248,10 +260,20 @@ export class BotSession {
    * from a log line thirty seconds later.
    */
   async prepare() {
-    this.team = { ...this.team, ...(await resolveTeam(this.summon.teamId)) };
-    this.team.ref = this.summon.teamId;
-    if (!this.team.name) this.team.name = this.summon.teamName;
+    const looked = await resolveTeam(this.summon.teamId);
+    // The database wins where it has an answer; the payload fills the gaps.
+    // `resolveTeam` returns nulls for a team it could not find, so a plain
+    // spread would wipe out the name and description the extension took the
+    // trouble to send.
+    this.team = {
+      ...this.team,
+      ...looked,
+      ref: this.summon.teamId,
+      name: looked.name ?? this.summon.teamName,
+      description: looked.description ?? this.summon.teamDescription,
+    };
     this.context.teamName = this.team.name;
+    this.context.teamDescription = this.team.description;
 
     if (!this.team.resolved) {
       this.log.warn(
@@ -689,6 +711,7 @@ export class BotSession {
       query,
       speaker,
       teamName: this.team.name,
+      teamDescription: this.team.description,
     });
 
     let answer;

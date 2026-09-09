@@ -129,8 +129,21 @@ export function parseSummon(body) {
 
   return {
     teamId,
-    // Only ever used to label a team row we could not resolve; never trusted.
+    /**
+     * The team's own name and description, as the sender knows them.
+     *
+     * Both are a FALLBACK, not the truth: the container looks the team up in
+     * Supabase and prefers what it finds there. They matter when that lookup
+     * fails — a slow database, a team created seconds ago, a scratch workspace
+     * id — because without them the bot joins a meeting unable to say whose
+     * standup it is sitting in.
+     *
+     * Never trusted for anything that grants access. A `team_name` is a label;
+     * it decides nothing.
+     */
     teamName: text(pick(body, ["team_name", "teamName"])) ?? null,
+    teamDescription:
+      text(pick(body, ["team_description", "teamDescription", "description"])) ?? null,
     meetLink,
     preContext,
     credentials,
@@ -143,6 +156,7 @@ export function parseSummon(body) {
           "pre_context", "preContext", "context", "briefing",
           "bot_credentials", "botCredentials", "credentials",
           "team_name", "teamName",
+          "team_description", "teamDescription", "description",
         ].includes(key),
     ),
   };

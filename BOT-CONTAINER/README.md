@@ -213,6 +213,8 @@ Before exposing the port beyond localhost:
 ```jsonc
 {
   "team_id":     "d2675e94-d9a8-4ede-aede-0fa107c52558",
+  "team_name":        "Astra_dev",                          // optional
+  "team_description": "we manage and help meeting efficiency",  // optional
   "meet_link":   "https://meet.google.com/okf-dwkm-ydu",
   "pre_context": "# Astra_dev\n**Leader:** …",     // Markdown string
   "bot_credentials": { "cookies": [ /* … */ ], "origins": [] }
@@ -242,6 +244,27 @@ fields are ignored silently (the log names them); the four core fields are
 enforced. `meetLink`, `meet_link` and `url` all work. That asymmetry is
 deliberate: the extension will grow fields, and a container that 400s on an
 unknown key breaks every time the sender ships first.
+
+`team_name` and `team_description` are a **fallback, not the truth**: the
+container looks the team up in Supabase and prefers what it finds. They matter
+when that lookup fails — a slow database, a team created seconds ago, a scratch
+workspace id — because without them the bot joins unable to say whose standup it
+is sitting in. Neither is ever trusted for anything that grants access; a
+`team_name` is a label, and it decides nothing.
+
+The description also goes into the prompt, on its own line above the harvested
+data:
+
+```
+# Sprint context — Astra_dev
+**This team:** we manage and help meeting efficiency
+## Team
+…
+```
+
+That line earns its place: it tells the model which of a hundred true facts
+about a repository is the relevant one. It is editable in place on the team page
+in the dashboard, by the team's leader.
 
 `bot_credentials` accepts either shape:
 
@@ -374,11 +397,20 @@ IDLE ──"Hey Astra"──▶ LISTENING ──5s silence──▶ CONFIRMING �
 
 The greeting is posted the moment the name is heard, before anyone knows what
 the question is — a bot that stays silent for eight seconds while somebody talks
-at it is indistinguishable from one that did not hear, and they start over. The
-question is then read back and a yes/no awaited, because captions mishear names
-and jargon constantly and an answer to a misheard question is worse than none:
-it is confidently wrong in front of the room. Silence during confirmation means
-proceed; only an explicit "no" throws the question away.
+at it is indistinguishable from one that did not hear, and they start over.
+
+The question then goes straight to the model, and **the answer opens by
+restating it in a few words**:
+
+> **Since you asked about who has the most commits —** Sanath leads the sprint
+> with 6 commits on the Sanath_Dev branch, followed by Souriesh with 4. Not that
+> anyone is counting, except for the log.
+
+That opener is doing real work. Captions mishear names and jargon constantly, so
+the room needs to see what the bot heard — but an explicit "is this right?
+yes/no" made somebody talk to a robot mid-standup to unlock an answer. The
+restatement gives the same check *and* the answer in one message.
+`BOT_CONFIRM=1` restores the spoken yes/no for a noisy room.
 
 `node scripts/conversation-demo.mjs` runs the whole loop with a live Gemini call
 and prints what the meeting chat would show.

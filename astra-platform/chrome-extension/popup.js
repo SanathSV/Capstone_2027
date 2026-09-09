@@ -547,9 +547,22 @@ async function connect() {
   try {
     // Straight to BOT-CONTAINER. The four fields are unchanged — the container
     // takes the same contract the dashboard endpoint did.
+    // The team's own name and description travel with the id.
+    //
+    // The id alone is enough for the container to *look the team up*, but only
+    // if that lookup succeeds — and it is one network call, against a database
+    // that may be slow or unreachable at exactly the moment somebody is trying
+    // to get a notetaker into a standup that has already started. Sending the
+    // two human-readable fields alongside means the bot can name the team in
+    // the meeting, and brief the model on what the team is for, even when the
+    // lookup fails.
+    const team = state.teams.find((t) => t.id === state.teamId);
+
     const result = await dispatchBot(
       {
         team_id: state.teamId,
+        team_name: team?.name ?? null,
+        team_description: team?.description ?? null,
         meet_link: state.meetLink,
         pre_context: state.preContext,
         bot_credentials: state.credentials,
