@@ -3,22 +3,28 @@
 Summon a briefed bot into the Google Meet you are already looking at.
 
 ```
-  Meet tab                                        Astra (npm run dev)
+  Meet tab                                        astra-platform (:3000)
   ┌──────────────┐   1. read active tab URL       ┌────────────────────┐
-  │ meet.google  │◀──────────────────────────────│                    │
+  │ meet.google  │◀──────────────────────────────│   READS live here  │
   └──────────────┘                                │                    │
                      2. sign in (Supabase Auth)   │   Supabase         │
   ┌──────────────┐   3. teams where you are lead  │   ├ /auth/v1       │
   │  the popup   │◀─────────────────────────────▶│   └ /rest/v1/teams │
   │              │   4. prefetch on team select:  │                    │
   │  [Connect    │      GET /api/teams/{id}/precontext                 │
-  │     Bot]     │      GET /api/bot-auth/session │                    │
-  └──────┬───────┘                                │                    │
-         │           5. POST /api/bot/summon      │                    │
-         └───────────── {team_id, meet_link, ────▶│  prints 4 fields   │
-                         pre_context,             │  returns success   │
-                         bot_credentials}         └────────────────────┘
+  │     Bot]     │      GET /api/bot-auth/session └────────────────────┘
+  └──────┬───────┘
+         │           5. POST /api/start-bot       BOT-CONTAINER (:3001)
+         └───────────── {team_id, meet_link, ────▶┌────────────────────┐
+                         pre_context,             │  joins the meeting │
+                         bot_credentials}         │  202 + session_id  │
+                                                  └────────────────────┘
 ```
+
+**Two services, two ports.** The extension *reads* from the dashboard — teams,
+pre-context, the leader's bot session — and *dispatches* to the container, which
+is the thing that owns a browser and can actually join a call. Both have to be
+running.
 
 No build step. No bundler. Point **Load unpacked** at this folder and it runs.
 
@@ -32,16 +38,20 @@ No build step. No bundler. Point **Load unpacked** at this folder and it runs.
    |---|---|
    | `SUPABASE_URL` | Supabase → Settings → **Data API** → Project URL. The **bare origin** — *not* the "RESTful endpoint" ending in `/rest/v1`. |
    | `SUPABASE_ANON_KEY` | Supabase → Settings → **API Keys**. `sb_publishable_…` or the legacy `anon` JWT; either works. |
-   | `API_BASE` | Where Astra runs. `http://localhost:3000` by default. |
+   | `API_BASE` | Where the Astra dashboard runs. `http://localhost:3000` by default. |
+   | `BOT_API_BASE` | Where BOT-CONTAINER runs. `http://localhost:3001` by default. |
+   | `BOT_API_TOKEN` | Must equal `BOT_API_TOKEN` in `BOT-CONTAINER/.env`. Leave empty only while the container is on localhost with no token of its own. |
 
-2. **Start Astra** — `npm run dev` in the parent directory.
+2. **Start both services** — `npm run dev` in the parent directory for the
+   dashboard, and `docker compose up` in `BOT-CONTAINER/` for the bot. The
+   popup's checks fail with a clear message if either is down.
 
 3. **Load it.** `chrome://extensions` → enable **Developer mode** → **Load
    unpacked** → select this `chrome-extension` folder.
 
 4. **Sign in** in the popup with your Astra account.
 
-> **Changing `API_BASE`?** Add that origin to `host_permissions` in
+> **Changing `API_BASE` or `BOT_API_BASE`?** Add that origin to `host_permissions` in
 > [`manifest.json`](manifest.json) too. Chrome blocks any host not listed there,
 > and the failure looks exactly like a CORS problem while never mentioning the
 > manifest.
@@ -78,6 +88,8 @@ while a call goes on without its notetaker.
 | Bot account is not authenticated | Astra → **Settings** → **Bot Account Setup** |
 | Bot credentials are not served by this deployment | Set `ASTRA_ALLOW_LOCAL_BOT_AUTH=1` in `.env.local` and restart |
 | Could not reach Astra at … | `npm run dev` is not running, or `API_BASE` is missing from `host_permissions` |
+| Could not reach the bot container at … | `docker compose up` is not running in `BOT-CONTAINER/`, or `BOT_API_BASE` is missing from `host_permissions` |
+| Unauthorised. Send BOT_API_TOKEN … | `BOT_API_TOKEN` in `config.js` does not match the container's `.env` |
 | You do not lead any teams | The bot is summoned on behalf of a team you lead — create one |
 
 ---
@@ -129,5 +141,8 @@ only ever read what the signed-in user could read anyway.
   Storage at `leaders/{user_id}/auth.json` with a short-lived signed URL, and
   `/api/bot-auth/session` goes away.
 - **Leadership is checked server-side.** The extension sends a `team_id`, and a
-  `team_id` is trivially forged, so `/api/bot/summon` re-checks it against the
-  database.
+  `team_id` is trivially forged, so the dashboard's `/api/bot/summon` re-checks
+  it against the database. **BOT-CONTAINER does not** — it has no user session
+  and no RLS to check against, so it trusts whoever holds `BOT_API_TOKEN`. That
+  is why the container's port is bound to `127.0.0.1` in its compose file, and
+  why the token stops being optional the moment it is not.

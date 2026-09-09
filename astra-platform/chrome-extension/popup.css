@@ -289,3 +289,80 @@ select:focus {
     transform: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Live bot view
+   --------------------------------------------------------------------------
+   Shown in place of the readiness checks once a bot is actually in the room.
+   The two never appear together: readiness answers "can I summon one?", this
+   answers "what is the one already in there doing?".
+   -------------------------------------------------------------------------- */
+
+.live {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--ink-600);
+  border-radius: 8px;
+  background: var(--ink-800);
+}
+
+/* A slow pulse while the bot is on its way in. Motion is doing real work
+   here: "Joining" and "In the call" are one word apart, and a static pill
+   makes a stuck join look identical to a healthy one. */
+.pill.live-working {
+  border-color: rgb(79 125 251 / 0.35);
+  background: rgb(79 125 251 / 0.12);
+  color: var(--astra-500);
+  animation: astra-pulse 1.6s ease-in-out infinite;
+}
+@keyframes astra-pulse {
+  50% { opacity: 0.55; }
+}
+/* Respect a user who has asked the OS for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .pill.live-working { animation: none; }
+}
+
+.live-where {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.stat {
+  padding: 6px 4px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.02);
+  text-align: center;
+}
+.stat-value {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat-label {
+  display: block;
+  margin-top: 1px;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.btn-danger {
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid rgb(242 85 90 / 0.4);
+  color: var(--red);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgb(242 85 90 / 0.1);
+}

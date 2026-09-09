@@ -14,9 +14,21 @@
  *                      extension -- it grants nothing on its own, because every
  *                      query it makes is still filtered by the RLS policies.
  *
- *   API_BASE           Where Astra itself is running.
+ *   API_BASE           Where the Astra dashboard is running. This is where the
+ *                      extension READS from: teams, pre-context, and the
+ *                      leader's exported bot session.
  *
- * Change API_BASE for a deployed instance, and add that origin to
+ *   BOT_API_BASE       Where BOT-CONTAINER is running. This is where the
+ *                      extension DISPATCHES to. Two different services on two
+ *                      different ports, deliberately: the dashboard knows who
+ *                      you are and what your sprint looks like; the container
+ *                      owns a browser and a meeting and knows neither.
+ *
+ *   BOT_API_TOKEN      Must equal BOT_API_TOKEN in BOT-CONTAINER/.env. Leave
+ *                      empty only while the container is bound to localhost
+ *                      with no token of its own.
+ *
+ * Change either base for a deployed instance, and add that origin to
  * "host_permissions" in manifest.json -- Chrome blocks any host not listed
  * there, with a CORS-shaped error that never mentions the manifest.
  */
@@ -24,6 +36,10 @@ export const CONFIG = {
   SUPABASE_URL: "https://rxmtnxbhbksxvmqxkrmf.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_tTGLevhUyjhKcgdEBd2Vkw_0SMbhXCI",
   API_BASE: "http://localhost:3000",
+
+  BOT_API_BASE: "http://localhost:3001",
+  BOT_DISPATCH_PATH: "/api/start-bot",
+  BOT_API_TOKEN: "",
 };
 
 /** True once the placeholders above have actually been replaced. */

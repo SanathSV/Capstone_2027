@@ -1,7 +1,15 @@
 import { CONFIG, configured } from "./config.js";
 import { signInWithPassword, fetchLedTeams } from "./lib/supabase.js";
 import { clearSession, getValidSession, saveSession } from "./lib/session.js";
-import { fetchBotCredentials, fetchPreContext, summonBot } from "./lib/api.js";
+import {
+  dispatchBot,
+  fetchBotCredentials,
+  fetchContainerHealth,
+  fetchLiveSession,
+  fetchPreContext,
+  fetchSession,
+  stopBot,
+} from "./lib/api.js";
 
 /**
  * The popup.
@@ -35,6 +43,19 @@ const state = {
   credentials: null,
   /** Bumped on every team change so a slow response cannot overwrite a newer one. */
   fetchToken: 0,
+
+  /**
+   * The bot currently in this room, as the container describes it — or null.
+   *
+   * This is re-derived from the container on every popup open rather than
+   * remembered, because a popup's memory dies with the popup and a session id
+   * cached in chrome.storage would be wrong the moment the bot left.
+   */
+  live: null,
+  pollTimer: null,
+
+  /** The container's own health, so "no bot" and "no service" look different. */
+  host: null,
 };
 
 // --------------------------------------------------------------------------
@@ -96,6 +117,15 @@ async function readActiveTab() {
  * single combined error would send people to the wrong page.
  */
 async function prefetch(teamId) {
+  // A bot is already in the room, so there is nothing to summon and nothing to
+  // prepare. Skipping this is not just tidiness: it stops the readiness checks
+  // reappearing underneath the live panel on reopen, and it avoids pulling a
+  // live Google session into the popup for a click that cannot happen.
+  if (state.live) {
+    el("readiness").hidden = true;
+    return;
+  }
+
   const token = ++state.fetchToken;
   state.preContext = null;
   state.credentials = null;
@@ -171,6 +201,11 @@ async function prefetch(teamId) {
 }
 
 function updateButton() {
+  // A bot is already in this room. Offering to summon another one is the one
+  // thing this popup must never do, so live mode owns the controls outright
+  // rather than competing with the readiness logic below.
+  if (state.live) return;
+
   const ready =
     Boolean(state.meetLink) &&
     Boolean(state.teamId) &&
@@ -188,6 +223,274 @@ function updateButton() {
   el("connectHint").textContent = ready
     ? "Sends the meet link, pre-context and bot session to Astra."
     : `Waiting on: ${missing.join(", ")}.`;
+}
+
+// --------------------------------------------------------------------------
+// The container
+// --------------------------------------------------------------------------
+
+/**
+ * Show whether BOT-CONTAINER is up, and what it says about itself.
+ *
+ * This gets its own line because the two failures it separates are
+ * indistinguishable from the summon side and mean opposite things: "there is no
+ * bot in this room" is the normal state, and "the bot service is not running" is
+ * a Connect Bot that is guaranteed to fail. Without this, both look like an
+ * enabled button.
+ */
+async function refreshHost() {
+  const pill = el("hostState");
+  try {
+    const health = await fetchContainerHealth();
+    state.host = health;
+
+    const ok = health.status === "ok";
+    pill.textContent = ok ? "Running" : "Degraded";
+    pill.className = `pill ${ok ? "ok" : "bad"}`;
+
+    const bits = [];
+    const active = health.sessions?.active ?? 0;
+    bits.push(active === 1 ? "1 meeting" : `${active} meetings`);
+    if (health.gemini_model) bits.push(health.gemini_model);
+    // The interesting half of "degraded" is always why, and it is always the
+    // database — the container cannot record a transcript without it.
+    if (!ok && health.supabase?.error) bits.push(health.supabase.error.slice(0, 60));
+    el("hostDetail").textContent = bits.join(" · ");
+  } catch (error) {
+    state.host = null;
+    pill.textContent = "Not running";
+    pill.className = "pill bad";
+    el("hostDetail").textContent = `${CONFIG.BOT_API_BASE} — ${error.message.slice(0, 80)}`;
+  }
+}
+
+// --------------------------------------------------------------------------
+// Live bot
+// --------------------------------------------------------------------------
+
+/**
+ * The container's session statuses, in words a person in a meeting can act on.
+ *
+ * `working: true` drives a pulsing pill. That is not decoration: "Joining" and
+ * "In the call" are one word apart in a small panel, and without motion a bot
+ * stuck in the lobby looks exactly like one that got in.
+ */
+const LIVE_STATES = {
+  queued: {
+    label: "Starting", tone: "live-working",
+    hint: "Preparing the browser.",
+  },
+  launching: {
+    label: "Starting", tone: "live-working",
+    hint: "Launching the browser.",
+  },
+  joining: {
+    label: "Joining", tone: "live-working",
+    hint: "Opening the meeting.",
+  },
+  waiting_admission: {
+    label: "In the lobby", tone: "bad",
+    hint: "Waiting to be let in \u2014 admit it from the Meet tab.",
+  },
+  in_call: {
+    label: "In the call", tone: "ok",
+    hint: 'Say "Hey Astra, ..." and it answers in the chat.',
+  },
+  leaving: {
+    label: "Leaving", tone: "live-working",
+    hint: "Saving the transcript and hanging up.",
+  },
+  ended: {
+    label: "Left", tone: "",
+    hint: "The bot has left this meeting.",
+  },
+  failed: {
+    label: "Failed", tone: "bad",
+    hint: "The bot could not stay in the meeting.",
+  },
+};
+
+/** Enter live mode: the summon controls are replaced by the bot's status. */
+function enterLive(session) {
+  state.live = session;
+  el("live").hidden = false;
+  el("readiness").hidden = true;
+  el("connect").hidden = true;
+  el("remove").hidden = false;
+  el("team").disabled = true;
+  renderLive(session);
+  startPolling();
+}
+
+/** Back to the summon controls, after the bot has left or failed. */
+function exitLive() {
+  stopPolling();
+  state.live = null;
+  el("live").hidden = true;
+  el("connect").hidden = false;
+  el("connect").textContent = "Connect Bot";
+  el("remove").hidden = true;
+  el("remove").disabled = false;
+  el("remove").textContent = "Remove Bot";
+  el("team").disabled = false;
+  el("readiness").hidden = !state.teamId;
+  updateButton();
+}
+
+function renderLive(session) {
+  const look = LIVE_STATES[session.status] ?? { label: session.status, tone: "", hint: "" };
+
+  const pill = el("liveState");
+  pill.textContent = look.label;
+  pill.className = `pill ${look.tone}`;
+
+  // Which bot, in which meeting \— the two facts that tell you whether this is
+  // the session you think it is.
+  const bits = [];
+  if (session.meeting?.number) bits.push(`Meeting #${session.meeting.number}`);
+  if (session.team?.name) bits.push(session.team.name);
+  if (session.google_account) bits.push(session.google_account);
+  // A guest join is not a failure, but it is not the normal state either: the
+  // bot had to be admitted by hand and shows up under a generic name. Saying so
+  // stops it looking like an ordinary signed-in join.
+  else if (session.joined_as === "guest") bits.push("joined as a guest");
+  el("liveWhere").textContent = bits.join(" \u00b7 ");
+
+  // The two things that need acting on rather than watching. Captions first:
+  // without them the bot is in the room but deaf, which is the more urgent of
+  // the two because it can still be fixed while the meeting is running.
+  const problem =
+    session.captions_enabled === false
+      ? "Captions could not be turned on for the bot, so it cannot transcribe or " +
+        "answer in this meeting. Meet's CC toggle is per-participant — nobody else " +
+        "can enable it for it. Remove the bot and summon it again."
+      : session.credential_warning;
+
+  if (problem) {
+    setError("mainError", problem);
+    el("mainError").className = "note note-warn";
+  }
+
+  const counts = session.counts ?? {};
+  el("liveStats").replaceChildren(
+    ...[
+      ["Lines", counts.finalLines ?? 0],
+      ["Asked", counts.questions ?? 0],
+      ["Answered", counts.answers ?? 0],
+    ].map(([label, value]) => {
+      // Built as nodes rather than an innerHTML string: these numbers come from
+      // the network, and this popup is not the place to reintroduce an
+      // injection point for the sake of three <div>s.
+      const cell = document.createElement("div");
+      cell.className = "stat";
+      const v = document.createElement("span");
+      v.className = "stat-value";
+      v.textContent = String(value);
+      const l = document.createElement("span");
+      l.className = "stat-label";
+      l.textContent = label;
+      cell.append(v, l);
+      return cell;
+    }),
+  );
+
+  el("connectHint").textContent = session.error ? session.error.slice(0, 140) : look.hint;
+
+  // A finished session is history, not a live bot: drop back to the summon
+  // controls so the room can be re-joined.
+  if (session.status === "ended" || session.status === "failed") {
+    stopPolling();
+    if (session.status === "failed") setError("mainError", session.error ?? "The bot failed.");
+    // Held on screen for a moment so the outcome is readable rather than a flash.
+    setTimeout(() => {
+      if (state.live && ["ended", "failed"].includes(state.live.status)) exitLive();
+    }, 4000);
+  }
+}
+
+/**
+ * Poll while the popup is open, and only while it is open.
+ *
+ * Two and a half seconds is chosen against what the user is actually waiting
+ * for: the lobby. Being admitted is the one transition where somebody is
+ * watching this panel, and a slower poll makes the extension feel broken at
+ * exactly that moment. The container is local and the response is a few hundred
+ * bytes, so the cost is nil.
+ */
+function startPolling() {
+  stopPolling();
+  state.pollTimer = setInterval(async () => {
+    if (!state.live) return stopPolling();
+    try {
+      const session = await fetchSession(state.live.session_id, {
+        token: state.session?.access_token,
+      });
+      if (session) {
+        state.live = session;
+        renderLive(session);
+      }
+      await refreshHost();
+    } catch {
+      // A dropped poll is not worth an error message \— the container may be
+      // restarting, and the next tick picks it up.
+    }
+  }, 2500);
+}
+
+function stopPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+}
+
+/**
+ * Is a bot already in this room?
+ *
+ * Asked on every popup open, because the popup's memory does not survive being
+ * closed \— which is most of the time.
+ */
+async function refreshLive() {
+  if (!state.meetLink) return;
+  try {
+    const session = await fetchLiveSession(state.meetLink, {
+      token: state.session?.access_token,
+    });
+    if (session) enterLive(session);
+  } catch {
+    // The container being down is not an error here: it just means there is no
+    // bot to show. Clicking Connect reports it properly.
+  }
+}
+
+/**
+ * Ask the bot to leave.
+ *
+ * Deliberately not a kill. The container flushes the caption buffer, drains the
+ * transcript queue and writes the meeting summary on the way out, so the last
+ * thing anybody said still reaches the database. That takes a moment, which is
+ * why the button says "Leaving..." and the panel keeps polling rather than
+ * declaring success immediately.
+ */
+async function removeBot() {
+  if (!state.live) return;
+  setError("mainError", null);
+  setError("mainOk", null);
+  el("remove").disabled = true;
+  el("remove").textContent = "Leaving...";
+
+  try {
+    const session = await stopBot(state.live.session_id, {
+      token: state.session?.access_token,
+    });
+    if (session) {
+      state.live = session;
+      renderLive(session);
+    }
+    startPolling(); // watch it through leaving -> ended
+  } catch (error) {
+    setError("mainError", error.message);
+    el("remove").disabled = false;
+    el("remove").textContent = "Remove Bot";
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -224,7 +527,7 @@ async function loadTeams() {
   if (state.teams.length === 1) {
     select.value = state.teams[0].id;
     state.teamId = state.teams[0].id;
-    await prefetch(state.teamId);
+    if (!state.live) await prefetch(state.teamId);
   }
 }
 
@@ -242,16 +545,31 @@ async function connect() {
   el("connect").textContent = "Summoning…";
 
   try {
-    const result = await summonBot(state.session.access_token, {
-      team_id: state.teamId,
-      meet_link: state.meetLink,
-      pre_context: state.preContext,
-      bot_credentials: state.credentials,
-    });
+    // Straight to BOT-CONTAINER. The four fields are unchanged — the container
+    // takes the same contract the dashboard endpoint did.
+    const result = await dispatchBot(
+      {
+        team_id: state.teamId,
+        meet_link: state.meetLink,
+        pre_context: state.preContext,
+        bot_credentials: state.credentials,
+      },
+      { token: state.session.access_token },
+    );
 
-    el("mainOk").textContent = result.message ?? "Bot summoned.";
-    el("mainOk").hidden = false;
-    el("connect").textContent = "Sent ✓";
+    // 202 means "on its way", not "in the room". Rather than say so in a
+    // sentence and leave the user watching a static button, hand straight over
+    // to the live panel — which then shows the join actually progressing, and
+    // which is also what stops this button being pressed a second time.
+    enterLive({
+      session_id: result.session_id,
+      status: "queued",
+      meeting: result.meeting ?? null,
+      team: result.team ?? null,
+      counts: {},
+      error: null,
+      google_account: null,
+    });
   } catch (error) {
     setError("mainError", error.message);
     el("connect").textContent = "Connect Bot";
@@ -281,6 +599,11 @@ async function boot() {
   show("mainPane");
 
   await readActiveTab();
+  await refreshHost();
+  // Before anything else about summoning: is there already a bot in this room?
+  // The popup is reopened far more often than a bot is summoned, so this is the
+  // common path, not the exception.
+  await refreshLive();
   await loadTeams();
   updateButton();
 }
@@ -305,6 +628,9 @@ el("loginForm").addEventListener("submit", async (event) => {
 });
 
 el("signOut").addEventListener("click", async () => {
+  // Stop polling before the session token goes: an in-flight poll with a
+  // cleared session would fail noisily for no reason.
+  stopPolling();
   await clearSession();
   state.session = null;
   state.credentials = null;
@@ -315,6 +641,9 @@ el("signOut").addEventListener("click", async () => {
 });
 
 el("team").addEventListener("change", async (event) => {
+  // The select is disabled in live mode, so this cannot fire then — but a team
+  // change must never quietly re-point a bot that is already in a call.
+  if (state.live) return;
   state.teamId = event.target.value;
   setError("mainError", null);
   setError("mainOk", null);
@@ -323,6 +652,12 @@ el("team").addEventListener("change", async (event) => {
 });
 
 el("connect").addEventListener("click", connect);
+el("remove").addEventListener("click", removeBot);
+
+// A popup is torn down without ceremony when it loses focus. Clearing the
+// interval here is tidiness rather than necessity, but it also stops a final
+// poll firing against a half-dismantled document.
+window.addEventListener("unload", stopPolling);
 
 boot().catch((error) => {
   setError("authError", error.message);

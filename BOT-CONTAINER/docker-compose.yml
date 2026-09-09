@@ -1,0 +1,63 @@
+services:
+  bot-container:
+    build: .
+    image: astra-bot-container:latest
+    container_name: astra-bot-container
+    restart: unless-stopped
+
+    # Values come from ./.env (copy .env.example). Listing them explicitly
+    # rather than using `env_file:` alone means an unset required variable is
+    # visible here as an empty string instead of silently defaulting.
+    env_file:
+      - .env
+    environment:
+      PORT: "3001"
+      HOST: "0.0.0.0"
+      NODE_ENV: production
+      # A container has no display; a headful browser here fails with a
+      # "Missing X server" error that does not mention this setting.
+      BOT_HEADLESS: "1"
+      TZ: ${TZ:-UTC}
+
+    ports:
+      # Bound to 127.0.0.1 deliberately. This endpoint accepts a live Google
+      # session in its request body; exposing it on 0.0.0.0 puts that on the
+      # local network. Change the left-hand side only together with
+      # BOT_API_TOKEN.
+      - "127.0.0.1:3001:3001"
+
+    # Chrome maps a lot of shared memory for its renderers. Docker's default
+    # /dev/shm is 64 MB, and exceeding it makes tabs crash with
+    # "Target closed" — the single most common way a containerised Playwright
+    # run fails mysteriously.
+    shm_size: "1gb"
+
+    # Not for the app: Chromium spawns a process tree, and the default pid
+    # limit is reachable across a few concurrent meetings.
+    pids_limit: 512
+
+    # A bot in a live call needs time to leave properly on shutdown: flush the
+    # caption buffer, drain the transcript queue, write the meeting summary.
+    # Docker's ten-second default kills it mid-flush.
+    stop_grace_period: 45s
+
+    volumes:
+      # Debug screenshots, and payload dumps when BOT_DUMP_PAYLOADS=1.
+      - ./data:/app/data
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,14 @@
+# Secrets. SUPABASE_SERVICE_ROLE_KEY bypasses every RLS policy you have.
+.env
+.env.*
+!.env.example
+
+node_modules/
+
+# Debug screenshots, and payload dumps when BOT_DUMP_PAYLOADS=1 — those contain
+# a LIVE GOOGLE SESSION. Never commit this directory.
+data/
+!data/.gitkeep
+
+*.log
+npm-debug.log*

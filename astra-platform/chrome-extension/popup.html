@@ -41,6 +41,12 @@
     <!-- Main -->
     <section id="mainPane" class="pane" hidden>
       <div class="row">
+        <span class="label mb0">Bot service</span>
+        <span id="hostState" class="pill">checking…</span>
+      </div>
+      <p id="hostDetail" class="live-where"></p>
+
+      <div class="row">
         <span class="label mb0">Meeting</span>
         <span id="meetState" class="pill">checking…</span>
       </div>
@@ -62,10 +68,25 @@
         </div>
       </div>
 
+      <!--
+        Live view. Replaces the readiness checks and the Connect button once a
+        bot is actually in this room, so the popup can never offer to summon a
+        second one into a meeting that already has one.
+      -->
+      <div id="live" class="live" hidden>
+        <div class="row">
+          <span class="label mb0">Bot</span>
+          <span id="liveState" class="pill">checking…</span>
+        </div>
+        <p id="liveWhere" class="live-where"></p>
+        <div id="liveStats" class="stats"></div>
+      </div>
+
       <p id="mainError" class="note note-error" hidden></p>
       <p id="mainOk" class="note note-ok" hidden></p>
 
       <button id="connect" class="btn btn-primary" disabled>Connect Bot</button>
+      <button id="remove" class="btn btn-danger" hidden>Remove Bot</button>
       <p id="connectHint" class="hint"></p>
     </section>
 
