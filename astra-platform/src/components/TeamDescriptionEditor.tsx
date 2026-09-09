@@ -108,7 +108,7 @@ export function TeamDescriptionEditor({
         autoFocus
         disabled={busy}
         placeholder="What is this team responsible for? One or two sentences."
-        className="w-full resize-y rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm leading-relaxed text-slate-200 placeholder:text-slate-600 focus:border-astra-500 focus:outline-none disabled:opacity-50"
+        className="input resize-y leading-relaxed"
       />
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -116,7 +116,7 @@ export function TeamDescriptionEditor({
           type="button"
           onClick={save}
           disabled={busy || !dirty}
-          className="rounded-lg bg-astra-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-astra-400 disabled:cursor-not-allowed disabled:opacity-45"
+          className="btn-primary px-4 py-2 text-xs"
         >
           {busy ? "Saving…" : "Save"}
         </button>
@@ -128,7 +128,7 @@ export function TeamDescriptionEditor({
             setError(null);
           }}
           disabled={busy}
-          className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-50"
+          className="btn-text py-2 text-xs"
         >
           Cancel
         </button>

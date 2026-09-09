@@ -26,10 +26,10 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">Teams</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-[32px] font-normal leading-tight text-slate-50">Teams</h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-400">
             Every team you lead or belong to. Open one to configure its integrations
             and generate the bot&rsquo;s pre-context.
           </p>
@@ -40,7 +40,7 @@ export default async function DashboardPage() {
         </ProgressLink>
       </div>
 
-      <section className="mb-10">
+      <section className="mb-12">
         <SectionHeading
           title="Teams I Lead"
           count={lead.length}
@@ -94,16 +94,18 @@ function SectionHeading({
   hint: string;
 }) {
   return (
-    <div className="mb-4">
+    // Sentence case at a readable size, not an uppercase micro-label. Google
+    // lets weight and colour carry hierarchy; shrinking a heading to 12px and
+    // spacing out the caps makes it harder to read in exchange for looking
+    // busy.
+    <div className="mb-5">
       <div className="flex items-center gap-2.5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
-          {title}
-        </h2>
-        <span className="rounded-full bg-ink-800 px-2 py-0.5 text-[11px] text-slate-400">
+        <h2 className="text-base font-medium text-slate-100">{title}</h2>
+        <span className="grid h-6 min-w-6 place-items-center rounded-full bg-ink-700 px-2 text-[11px] font-medium tabular-nums text-slate-300">
           {count}
         </span>
       </div>
-      <p className="mt-1 text-xs text-slate-600">{hint}</p>
+      <p className="mt-1.5 text-[13px] text-slate-500">{hint}</p>
     </div>
   );
 }

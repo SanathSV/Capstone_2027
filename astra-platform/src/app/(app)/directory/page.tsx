@@ -25,7 +25,7 @@ export default async function DirectoryPage() {
     <>
       <div className="mb-8">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
             Resource Pool
           </h1>
           {isAdmin ? (

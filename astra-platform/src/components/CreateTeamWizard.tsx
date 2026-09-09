@@ -180,7 +180,7 @@ export function CreateTeamWizard({ employees }: { employees: Employee[] }) {
         <div className="animate-fade-up space-y-4">
           <div className="card p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white">
+              <h2 className="text-sm font-semibold text-slate-50">
                 Roster
                 <span className="ml-2 text-xs font-normal text-slate-500">
                   {chosen.length} selected
@@ -203,7 +203,7 @@ export function CreateTeamWizard({ employees }: { employees: Employee[] }) {
                     className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-700 bg-ink-900/60 p-3"
                   >
                     <div className="min-w-[140px] flex-1">
-                      <div className="text-sm text-white">{employee.full_name}</div>
+                      <div className="text-sm text-slate-50">{employee.full_name}</div>
                       <div className="text-[11px] text-slate-500">{employee.email}</div>
                     </div>
 
@@ -411,7 +411,9 @@ function Steps({ current }: { current: number }) {
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${
                 state === "current"
-                  ? "border-astra-500 bg-astra-500 text-white"
+                  // text-white, not the theme heading colour: this chip is filled
+                    // with Google blue in both themes.
+                    ? "border-astra-500 bg-astra-500 text-white"
                   : state === "done"
                     ? "border-signal-green/40 bg-signal-green/10 text-signal-green"
                     : "border-ink-600 text-slate-600"

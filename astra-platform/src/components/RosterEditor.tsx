@@ -93,7 +93,7 @@ export function RosterEditor({
     <div className="card">
       <div className="flex items-center justify-between border-b border-ink-700 p-5">
         <div>
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-slate-50">
             Roster
             <span className="ml-2 text-xs font-normal text-slate-500">
               {members.length} member{members.length === 1 ? "" : "s"}
@@ -172,7 +172,7 @@ export function RosterEditor({
             <div key={member.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4">
               <div className="min-w-[160px] flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-white">{member.employee.full_name}</span>
+                  <span className="text-sm text-slate-50">{member.employee.full_name}</span>
                   {member.is_lead && (
                     <span className="chip border-astra-500/30 bg-astra-500/10 py-0.5 text-[10px] text-astra-300">
                       Leader

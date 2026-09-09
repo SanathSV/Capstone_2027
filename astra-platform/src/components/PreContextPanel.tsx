@@ -139,7 +139,7 @@ export function PreContextPanel({
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-700 bg-gradient-to-r from-astra-500/10 to-transparent p-5">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-50">
             <BoltIcon />
             Pre-Context Engine
           </h2>
@@ -273,7 +273,7 @@ export function PreContextPanel({
                         onClick={() => setView(mode)}
                         className={`rounded px-2 py-0.5 transition ${
                           view === mode
-                            ? "bg-ink-700 text-white"
+                            ? "bg-ink-700 text-slate-50"
                             : "text-slate-500 hover:text-slate-300"
                         }`}
                       >

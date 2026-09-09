@@ -88,7 +88,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight text-white">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
                 {team.name}
               </h1>
               {isLeader ? (
@@ -138,7 +138,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
             <IntegrationsForm teamId={team.id} initial={integrations} />
           ) : (
             <div className="card p-5">
-              <h2 className="text-sm font-semibold text-white">Integrations</h2>
+              <h2 className="text-sm font-semibold text-slate-50">Integrations</h2>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">
                 The team&rsquo;s GitHub, Jira and Slack credentials are held by{" "}
                 {leaderName ?? "the team leader"} and are not visible to other members.
@@ -161,7 +161,7 @@ function RunHistory({
   return (
     <div className="card">
       <div className="border-b border-ink-700 p-5">
-        <h2 className="text-sm font-semibold text-white">Recent context runs</h2>
+        <h2 className="text-sm font-semibold text-slate-50">Recent context runs</h2>
         <p className="mt-0.5 text-[11px] text-slate-600">
           Each row stores the exact payload the bot was given, so a meeting can be
           replayed against the context it actually had.

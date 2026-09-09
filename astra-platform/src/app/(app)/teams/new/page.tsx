@@ -18,7 +18,7 @@ export default async function NewTeamPage() {
         <ProgressLink href="/dashboard" className="text-xs text-slate-500 hover:text-slate-300">
           ← Teams
         </ProgressLink>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-50">
           New team
         </h1>
         <p className="mt-1 text-sm text-slate-500">

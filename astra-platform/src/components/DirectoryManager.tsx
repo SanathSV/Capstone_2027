@@ -144,7 +144,7 @@ export function DirectoryManager({
       ) : (
       <form onSubmit={save} className="card h-fit space-y-4 p-5 lg:sticky lg:top-20">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-slate-50">
             {editingId ? "Edit employee" : "Add an employee"}
           </h2>
           {editingId && (
@@ -260,11 +260,13 @@ export function DirectoryManager({
             {filtered.map((employee) => (
               <div
                 key={employee.id}
-                className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4 transition hover:bg-ink-800/50"
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 transition duration-200 ease-emphasized hover:bg-ink-800/60"
               >
+                <PersonAvatar name={employee.full_name} email={employee.email} />
+
                 <div className="min-w-[180px] flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white">
+                    <span className="text-sm font-medium text-slate-100">
                       {employee.full_name}
                     </span>
                     {employee.profile_id && (
@@ -276,7 +278,7 @@ export function DirectoryManager({
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-slate-400">
                     {employee.email}
                     {employee.title && ` · ${employee.title}`}
                   </div>
@@ -292,7 +294,7 @@ export function DirectoryManager({
                   <div className="ml-auto flex gap-1.5">
                     <button
                       onClick={() => edit(employee)}
-                      className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-ink-700 hover:text-white"
+                      className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-ink-700 hover:text-slate-50"
                     >
                       Edit
                     </button>
@@ -361,6 +363,51 @@ const HANDLE_STYLES = {
 } as const;
 
 /** A missing handle is shown, greyed — silence here is a configuration bug. */
+/**
+ * A person, as a coloured initial.
+ *
+ * Google puts one of these on every row of every people list, and it is not
+ * decoration: in a list of a dozen names that all begin to look alike, colour
+ * plus letter is what the eye actually navigates by, well before it has read
+ * anything. The hue is derived from the email rather than assigned, so the same
+ * person is the same colour on every screen and across reloads — an avatar that
+ * changed colour between renders would be worse than none.
+ *
+ * The four hues are Google's own brand colours, in their dark-theme tints.
+ */
+function PersonAvatar({ name, email }: { name: string; email: string }) {
+  const PALETTE = [
+    "bg-astra-500/20 text-astra-300 ring-astra-300/25",       // blue
+    "bg-signal-red/15 text-signal-red ring-signal-red/25",     // red
+    "bg-signal-amber/15 text-signal-amber ring-signal-amber/25", // yellow
+    "bg-signal-green/15 text-signal-green ring-signal-green/25", // green
+    "bg-signal-violet/15 text-signal-violet ring-signal-violet/25",
+  ];
+
+  // A tiny deterministic hash. Not a good hash — it does not need to be, it
+  // needs to be stable and cheap, and to spread a few hundred names evenly
+  // across five buckets.
+  let sum = 0;
+  for (const ch of email || name) sum = (sum * 31 + ch.charCodeAt(0)) % 100000;
+
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ring-1 ring-inset ${PALETTE[sum % PALETTE.length]}`}
+    >
+      {initials}
+    </span>
+  );
+}
+
 function Handle({ kind, value }: { kind: keyof typeof HANDLE_STYLES; value: string | null }) {
   const style = HANDLE_STYLES[kind];
   if (!value) {

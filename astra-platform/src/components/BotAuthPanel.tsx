@@ -129,7 +129,7 @@ export function BotAuthPanel({ initial }: { initial: Payload }) {
     <div className="card">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-700 p-5">
         <div>
-          <h2 className="flex items-center gap-2.5 text-sm font-semibold text-white">
+          <h2 className="flex items-center gap-2.5 text-sm font-semibold text-slate-50">
             Bot Account Setup
             <BotStatusBadge
               status={badgeStatus}

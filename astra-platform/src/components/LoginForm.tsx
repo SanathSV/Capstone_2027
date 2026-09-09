@@ -105,7 +105,7 @@ export function LoginForm() {
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <AstraMark className="h-9 w-9" />
           <div>
-            <h1 className="text-lg font-semibold text-white">Astra</h1>
+            <h1 className="text-lg font-semibold text-slate-50">Astra</h1>
             <p className="mt-1 text-sm text-slate-500">
               Sprint context for the meeting bot.
             </p>
@@ -115,14 +115,19 @@ export function LoginForm() {
         <form onSubmit={submit} className="card space-y-4 p-6">
           {mode === "reset" ? (
             <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-white">Reset your password</h2>
+              <h2 className="text-sm font-semibold text-slate-50">Reset your password</h2>
               <p className="text-[11px] leading-relaxed text-slate-500">
                 Enter the email you signed up with and we will send a single-use link.
                 Opening it signs you in just long enough to choose a new password.
               </p>
             </div>
           ) : (
-          <div className="flex rounded-lg border border-ink-700 bg-ink-900 p-1 text-xs">
+          // A segmented control, in the same pill language as every other
+          // control in the app. The old square-cornered version was the one
+          // thing on this page still speaking the previous design's dialect,
+          // which is exactly the sort of detail that makes an interface feel
+          // assembled rather than designed.
+          <div className="flex rounded-full border border-ink-700 bg-ink-900 p-1 text-xs">
             {(
               [
                 ["signin", "Sign in"],
@@ -138,10 +143,13 @@ export function LoginForm() {
                   setError(null);
                   setNotice(null);
                 }}
-                className={`flex-1 rounded-md px-2 py-1.5 transition ${
+                // whitespace-nowrap because "Create account" wraps to two lines
+                // at this width otherwise, which makes the whole control taller
+                // than its siblings and the row visibly uneven.
+                className={`flex-1 whitespace-nowrap rounded-full px-2 py-2 font-medium transition duration-200 ease-emphasized ${
                   mode === value
-                    ? "bg-ink-700 text-white"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-astra-500/15 text-astra-300"
+                    : "text-slate-400 hover:bg-ink-800 hover:text-slate-200"
                 }`}
               >
                 {label}

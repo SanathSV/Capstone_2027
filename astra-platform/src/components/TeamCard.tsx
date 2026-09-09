@@ -38,17 +38,27 @@ export function TeamCard({ team }: { team: TeamSummary }) {
         event.preventDefault();
         navigate(href);
       }}
-      className={`card pressable group flex flex-col gap-3 p-5 hover:border-astra-500/50 hover:bg-ink-800/80 ${
-        pending ? "border-astra-500/60 bg-ink-800" : ""
+      className={`card-interactive pressable group relative flex flex-col gap-3 overflow-hidden p-6 ${
+        pending ? "border-astra-300/50 bg-ink-800" : ""
       }`}
     >
+      {/* A hairline of accent along the top edge, revealed on hover. Material
+          uses a state layer for this; a top rule reads better on a card in a
+          grid because it marks WHICH card without shifting any layout. */}
+      <span
+        aria-hidden="true"
+        className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-astra-500 to-signal-violet transition-opacity duration-200 ${
+          pending ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+      />
+
       <div className="flex items-start justify-between gap-3">
-        <h3 className="flex items-center gap-2 font-medium text-white group-hover:text-astra-300">
+        <h3 className="flex items-center gap-2 text-[15px] font-medium text-slate-100 transition-colors group-hover:text-astra-300">
           {team.name}
-          {pending && <InlineSpinner className="h-3.5 w-3.5 text-astra-400" />}
+          {pending && <InlineSpinner className="h-3.5 w-3.5 text-astra-300" />}
         </h3>
         {team.i_lead ? (
-          <span className="chip border-astra-500/30 bg-astra-500/10 text-astra-300">
+          <span className="chip shrink-0 border-astra-300/25 bg-astra-500/15 text-astra-300">
             Leader
           </span>
         ) : (
@@ -57,7 +67,7 @@ export function TeamCard({ team }: { team: TeamSummary }) {
       </div>
 
       {team.description && (
-        <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">
+        <p className="line-clamp-2 text-[13px] leading-relaxed text-slate-400">
           {team.description}
         </p>
       )}
@@ -69,13 +79,13 @@ export function TeamCard({ team }: { team: TeamSummary }) {
         </p>
       )}
 
-      <div className="mt-auto flex items-center gap-3 border-t border-ink-700 pt-3 text-xs text-slate-500">
+      <div className="mt-auto flex items-center gap-2 border-t border-ink-700/70 pt-4 text-xs text-slate-400">
         <span>
           {team.member_count} member{team.member_count === 1 ? "" : "s"}
         </span>
         {!team.i_lead && team.leader && (
           <>
-            <span className="text-ink-600">·</span>
+            <span className="text-slate-600">·</span>
             <span className="truncate">
               led by {team.leader.full_name ?? team.leader.email}
             </span>

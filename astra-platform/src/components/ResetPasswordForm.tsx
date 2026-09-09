@@ -88,7 +88,7 @@ export function ResetPasswordForm() {
       <div className="w-full max-w-sm animate-fade-up">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <AstraMark className="h-9 w-9" />
-          <h1 className="text-lg font-semibold text-white">Choose a new password</h1>
+          <h1 className="text-lg font-semibold text-slate-50">Choose a new password</h1>
         </div>
 
         {checking ? (

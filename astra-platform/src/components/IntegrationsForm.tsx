@@ -76,7 +76,7 @@ export function IntegrationsForm({
   return (
     <div className="card">
       <div className="border-b border-ink-700 p-5">
-        <h2 className="text-sm font-semibold text-white">Integrations</h2>
+        <h2 className="text-sm font-semibold text-slate-50">Integrations</h2>
         <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
           Tokens are encrypted with AES-256-GCM before they are stored and are never sent
           back to this page. Setup instructions are in{" "}
