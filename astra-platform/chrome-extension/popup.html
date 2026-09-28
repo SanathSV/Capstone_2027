@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Astra</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="brand">ASTRA</span>
+      <span id="who" class="who"></span>
+      <button id="signOut" class="link" hidden>Sign out</button>
+    </header>
+
+    <!-- Shown when config.js still has its placeholders in it. -->
+    <section id="unconfigured" class="pane" hidden>
+      <p class="note note-warn">
+        <strong>Not configured yet.</strong> Open
+        <code>chrome-extension/config.js</code> and paste your Supabase URL and
+        publishable key, then reload the extension.
+      </p>
+    </section>
+
+    <!-- Sign in -->
+    <section id="authPane" class="pane" hidden>
+      <form id="loginForm">
+        <label class="label" for="email">Work email</label>
+        <input id="email" type="email" required autocomplete="username" placeholder="you@company.com" />
+
+        <label class="label" for="password">Password</label>
+        <input id="password" type="password" required autocomplete="current-password" placeholder="Your Astra password" />
+
+        <p id="authError" class="note note-error" hidden></p>
+
+        <button id="signIn" type="submit" class="btn btn-primary">Sign in</button>
+        <p class="hint">The same account you use on the Astra dashboard.</p>
+      </form>
+    </section>
+
+    <!-- Main -->
+    <section id="mainPane" class="pane" hidden>
+      <div class="row">
+        <span class="label mb0">Bot service</span>
+        <span id="hostState" class="pill">checking…</span>
+      </div>
+      <p id="hostDetail" class="live-where"></p>
+
+      <div class="row">
+        <span class="label mb0">Meeting</span>
+        <span id="meetState" class="pill">checking…</span>
+      </div>
+      <p id="meetLink" class="mono link-text"></p>
+
+      <label class="label" for="team">Team</label>
+      <select id="team">
+        <option value="">Loading your teams…</option>
+      </select>
+
+      <div id="readiness" class="readiness" hidden>
+        <div class="check" id="checkContext">
+          <span class="dot"></span><span class="check-label">Pre-context</span>
+          <span class="check-detail">—</span>
+        </div>
+        <div class="check" id="checkCreds">
+          <span class="dot"></span><span class="check-label">Bot credentials</span>
+          <span class="check-detail">—</span>
+        </div>
+      </div>
+
+      <!--
+        Live view. Replaces the readiness checks and the Connect button once a
+        bot is actually in this room, so the popup can never offer to summon a
+        second one into a meeting that already has one.
+      -->
+      <div id="live" class="live" hidden>
+        <div class="row">
+          <span class="label mb0">Bot</span>
+          <span id="liveState" class="pill">checking…</span>
+        </div>
+        <p id="liveWhere" class="live-where"></p>
+        <div id="liveStats" class="stats"></div>
+      </div>
+
+      <p id="mainError" class="note note-error" hidden></p>
+      <p id="mainOk" class="note note-ok" hidden></p>
+
+      <button id="connect" class="btn btn-primary" disabled>Connect Bot</button>
+      <button id="remove" class="btn btn-danger" hidden>Remove Bot</button>
+      <p id="connectHint" class="hint"></p>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

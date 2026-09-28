@@ -1,0 +1,22 @@
+{
+  "name": "astra-bot-container",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Astra meeting bot: joins a Google Meet, transcribes it, and answers wake-word questions in the in-call chat.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "install:browser": "playwright install --with-deps chromium",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "playwright": "1.48.2"
+  }
+}

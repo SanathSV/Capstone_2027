@@ -1,0 +1,27 @@
+node_modules/
+.next/
+.next-*/
+out/
+build/
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Captured extension request bodies. Every one of these contains a live
+# Google session, exactly like auth.json does.
+_sent_data_extension/
+
+# Bot credentials produced by bot-auth/generate_google_auth.py.
+# auth.json IS a live Google session. Never commit it.
+bot-auth/secrets/
+bot-auth/secrets/leaders/
+**/meta.json
+**/auth.json
+**/storage_state.json
+
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/

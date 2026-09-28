@@ -1,0 +1,352 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Astra's surface, in Google's design language — dark and light.
+ *
+ * ===========================================================================
+ * HOW THEMING WORKS HERE
+ * ===========================================================================
+ * Every colour is a CSS custom property holding **space-separated RGB
+ * channels**, and tailwind.config.ts consumes each one as
+ * `rgb(var(--x) / <alpha-value>)`. That shape is what keeps `bg-ink-800/60`
+ * working: a var holding `#161a23` could not be given an opacity, but one
+ * holding `22 26 35` can.
+ *
+ * The consequence is that the token NAMES are semantic rather than literal.
+ * `ink-950` does not mean "very dark", it means "the page"; `slate-200` does
+ * not mean "light grey", it means "body text". Both flip when the theme does,
+ * so several thousand existing utility classes across two dozen files switch
+ * theme without any of them being touched.
+ *
+ * ===========================================================================
+ * THREE IDEAS CARRY THE LOOK
+ * ===========================================================================
+ *   1. ELEVATION IS TONAL. A card is a *different surface*, not a shadow. In
+ *      dark it is lighter than the page; in light it is whiter. The `ink` ramp
+ *      is that ladder in both directions.
+ *
+ *   2. SHAPE IS GENEROUS. Buttons are pills, cards 16-20px, containers 28px.
+ *      The single most recognisable signal in the system.
+ *
+ *   3. INTERACTION IS A STATE LAYER. Hover and press are a translucent wash of
+ *      the content colour, not a swap to a different background — which is why
+ *      Google's controls feel like one material being lit.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- surfaces: the elevation ladder ------------------------------------ */
+  --ink-950: 14 14 15; /* page */
+  --ink-900: 20 21 22; /* inputs, wells */
+  --ink-850: 27 28 29; /* cards */
+  --ink-800: 30 31 32; /* raised, header, hover */
+  --ink-700: 40 42 44; /* chips */
+  --ink-600: 51 53 55; /* borders */
+  --ink-500: 68 71 70; /* emphasised borders */
+
+  /* --- text: an emphasis ladder, not a lightness one --------------------- */
+  --slate-50: 255 255 255; /* highest emphasis — headings */
+  --slate-100: 241 243 244;
+  --slate-200: 227 227 227; /* body */
+  --slate-300: 196 199 197; /* secondary */
+  --slate-400: 162 169 173; /* tertiary */
+  --slate-500: 142 145 143; /* muted labels */
+  --slate-600: 111 115 119; /* placeholder, disabled */
+  --slate-700: 95 99 104;
+  --slate-800: 60 64 67;
+  --slate-900: 40 42 44;
+
+  /* --- accent: Google blue ----------------------------------------------- */
+  --astra-200: 211 227 253;
+  --astra-300: 168 199 250; /* accent text on dark */
+  --astra-400: 138 180 248;
+  --astra-500: 66 133 244; /* the action colour */
+  --astra-600: 26 115 232;
+  --astra-700: 8 66 160;
+
+  /* --- status ------------------------------------------------------------ */
+  --signal-green: 129 201 149;
+  --signal-amber: 253 214 99;
+  --signal-red: 242 139 130;
+  --signal-violet: 208 188 255;
+
+  /* --- theme-dependent effects ------------------------------------------- */
+  /* The two faint washes behind the page. */
+  --page-tint-a: rgba(66, 133, 244, 0.1);
+  --page-tint-b: rgba(208, 188, 255, 0.055);
+  /* Shadows are near-black on dark; see the light block for why they change. */
+  --shadow-1: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --shadow-2: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  --shadow-3: 0 4px 4px 0 rgba(0, 0, 0, 0.3), 0 8px 12px 6px rgba(0, 0, 0, 0.15);
+  /* The shimmer sweep across skeletons: light on dark, dark on light. */
+  --shimmer-sweep: rgba(255, 255, 255, 0.05);
+}
+
+/*
+ * Light.
+ *
+ * Not an inversion — Material's light palette is its own thing. Two decisions
+ * worth naming:
+ *
+ *   Cards are pure white and the PAGE is tinted (#f8fafd), which is the
+ *   opposite of the naive approach. Google does this everywhere: it makes a
+ *   card read as a raised sheet on a surface rather than a hole cut in one.
+ *
+ *   The accent darkens. #8ab4f8 is legible on near-black and fails badly on
+ *   white — about 2:1. The light theme uses Google's #1a73e8 for accent text,
+ *   which clears 4.5:1, while the filled-button blue stays #4285f4 because
+ *   white on it is fine in both themes.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ink-950: 248 250 253; /* page — faintly cool, as Google's is */
+  --ink-900: 255 255 255; /* inputs */
+  --ink-850: 255 255 255; /* cards */
+  --ink-800: 241 243 244; /* raised, hover */
+  --ink-700: 232 234 237; /* chips */
+  --ink-600: 218 220 224; /* borders */
+  --ink-500: 189 193 198; /* emphasised borders */
+
+  --slate-50: 31 31 31; /* headings */
+  --slate-100: 32 33 36;
+  --slate-200: 60 64 67; /* body */
+  --slate-300: 68 71 70; /* secondary */
+  --slate-400: 95 99 104; /* tertiary */
+  --slate-500: 112 117 122; /* muted */
+  --slate-600: 128 134 139; /* placeholder */
+  --slate-700: 154 160 166;
+  --slate-800: 189 193 198;
+  --slate-900: 218 220 224;
+
+  --astra-200: 8 66 160;
+  --astra-300: 26 115 232; /* accent text on light */
+  --astra-400: 26 115 232;
+  --astra-500: 66 133 244;
+  --astra-600: 24 90 188;
+  --astra-700: 211 227 253;
+
+  --signal-green: 24 128 56;
+  --signal-amber: 146 100 0;
+  --signal-red: 197 34 31;
+  --signal-violet: 103 58 183;
+
+  --page-tint-a: rgba(66, 133, 244, 0.07);
+  --page-tint-b: rgba(103, 58, 183, 0.04);
+  /* Far softer. A shadow tuned for a black page looks like soot on a white
+     one — this is the most common way a dark-first design fails when it is
+     given a light mode. */
+  --shadow-1: 0 1px 2px 0 rgba(60, 64, 67, 0.12), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+  --shadow-2: 0 1px 3px 0 rgba(60, 64, 67, 0.14), 0 4px 8px 3px rgba(60, 64, 67, 0.06);
+  --shadow-3: 0 4px 4px 0 rgba(60, 64, 67, 0.16), 0 8px 12px 6px rgba(60, 64, 67, 0.07);
+  --shimmer-sweep: rgba(0, 0, 0, 0.05);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-slate-200 antialiased;
+  /* Two very wide, very faint washes. Material calls this a surface tint: it is
+     nowhere near visible as a colour, it just stops several thousand pixels of
+     one flat value from reading as dead. */
+  background-image:
+    radial-gradient(70rem 45rem at 8% -12%, var(--page-tint-a), transparent 62%),
+    radial-gradient(55rem 35rem at 100% -5%, var(--page-tint-b), transparent 58%);
+  background-attachment: fixed;
+  font-feature-settings: "cv11", "ss01";
+  /* Only the theme's own colours animate, and only on an explicit toggle — the
+     class is added by ThemeToggle and removed a beat later, so this never slows
+     down an ordinary hover. */
+  transition: none;
+}
+
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 220ms cubic-bezier(0.2, 0, 0, 1),
+    border-color 220ms cubic-bezier(0.2, 0, 0, 1),
+    color 220ms cubic-bezier(0.2, 0, 0, 1),
+    fill 220ms cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+/* Display type wants to be tighter than body type — at 30px the default
+   tracking looks loose and amateur, which is the difference between "big text"
+   and a headline. */
+h1,
+h2 {
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: rgb(var(--astra-500) / 0.32);
+}
+
+/* Scrollbars, so the JSON viewer does not punch a bright rectangle in the page. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ink-600)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--ink-600));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--ink-500));
+  background-clip: content-box;
+}
+
+/* One focus treatment everywhere. Material's is a visible ring with a gap, and
+   :focus-visible means it appears for keyboard users without putting a ring
+   around everything a mouse touches. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--astra-300));
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+@layer components {
+  /* --- surfaces ---------------------------------------------------------- */
+
+  .card {
+    @apply rounded-2xl border border-ink-600/70 bg-ink-850 shadow-card;
+  }
+
+  /* A card that responds to the pointer. The border lifting is doing the work
+     here — a border change reads more clearly than a background change of the
+     same magnitude, in either theme. */
+  .card-interactive {
+    @apply card transition duration-200 ease-emphasized
+           hover:border-ink-500 hover:bg-ink-800 hover:shadow-raised;
+  }
+
+  /* --- typography -------------------------------------------------------- */
+
+  .label {
+    @apply mb-2 block text-xs font-medium tracking-wide text-slate-400;
+  }
+
+  .section-title {
+    @apply text-sm font-medium text-slate-300;
+  }
+
+  /* --- form controls ----------------------------------------------------- */
+
+  .input {
+    @apply w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-2.5 text-sm text-slate-100
+           placeholder:text-slate-600 outline-none transition duration-200 ease-emphasized
+           hover:border-ink-500
+           focus:border-astra-300 focus:ring-2 focus:ring-astra-300/25
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* --- buttons ----------------------------------------------------------- */
+
+  .btn {
+    /* rounded-full is the Material 3 button shape, and active:scale is the
+       cheapest possible "I registered your click": it lands on the same frame
+       as the press, long before any network round trip. */
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full
+           px-5 py-2.5 text-sm font-medium leading-none
+           transition duration-200 ease-emphasized
+           active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40
+           disabled:active:scale-100;
+  }
+
+  /* text-white, not text-slate-50: this sits on Google blue in BOTH themes,
+     where white is correct and the theme's heading colour would be wrong. */
+  .btn-primary {
+    @apply btn bg-astra-500 text-white shadow-card
+           hover:bg-astra-600 hover:shadow-raised;
+  }
+
+  /* Material's "tonal" button: the container colour rather than the full
+     accent. The right weight for a secondary action that is still the obvious
+     next step — louder than an outline, quieter than a filled button. */
+  .btn-tonal {
+    @apply btn bg-astra-500/15 text-astra-300 hover:bg-astra-500/25;
+  }
+
+  .btn-ghost {
+    @apply btn border border-ink-600 bg-transparent text-slate-300
+           hover:border-ink-500 hover:bg-ink-800 hover:text-slate-50;
+  }
+
+  .btn-text {
+    @apply btn px-3 text-slate-300 hover:bg-ink-800 hover:text-slate-50;
+  }
+
+  .btn-danger {
+    @apply btn border border-signal-red/35 bg-signal-red/10 text-signal-red
+           hover:bg-signal-red/20;
+  }
+
+  /* --- small pieces ------------------------------------------------------ */
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-ink-700/60
+           px-3 py-1 text-xs font-medium text-slate-300;
+  }
+
+  .mono {
+    @apply font-mono text-[11px] leading-relaxed;
+  }
+
+  /* Anything that navigates gets the same press feedback as a button. */
+  .pressable {
+    @apply transition duration-200 ease-emphasized active:scale-[0.99];
+  }
+
+  /* A shimmer sweep for placeholders that stand in for text rather than blocks. */
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+  .shimmer::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      var(--shimmer-sweep),
+      transparent
+    );
+  }
+
+  /* A hairline that fades at both ends. Used between sections, where a full
+     solid rule would cut the page in half. */
+  .rule {
+    @apply h-px w-full border-0 bg-gradient-to-r from-transparent via-ink-600 to-transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Skeletons and progress bars are the only motion in the app; honour the
+     preference by holding them still rather than removing the affordance. */
+  .animate-pulse,
+  .animate-shimmer,
+  .animate-route-progress,
+  .animate-fade-up {
+    animation: none !important;
+  }
+  .btn,
+  .pressable,
+  .card-interactive,
+  html.theme-transition,
+  html.theme-transition * {
+    transform: none !important;
+    transition: none !important;
+  }
+}
