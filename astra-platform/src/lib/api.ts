@@ -194,7 +194,7 @@ export function dbError(
       500,
       `The database refused the "${step}" step for the ${role} role ` +
         `(${error.message}). This is a missing GRANT, not a policy problem — ` +
-        "run supabase/fix-grants.sql in the Supabase SQL Editor.",
+        "run ../astra-extras/supabase/fix-grants.sql in the Supabase SQL Editor.",
       { step, role, code: error.code ?? null },
     );
   }

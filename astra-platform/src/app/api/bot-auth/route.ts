@@ -65,6 +65,10 @@ export async function DELETE(request: Request) {
     const { user, supabase } = await requireCaller(request);
     const url = new URL(request.url);
 
+    if (!localBotAuthEnabled()) {
+      throw new ApiError(503, "Manage local bot credentials from Astra running on your own machine.");
+    }
+
     // ?cancel=1 stops a sign-in in progress; without it, revoke the credentials.
     if (url.searchParams.get("cancel") === "1") {
       const cancelled = cancelBotAuth(user.id);

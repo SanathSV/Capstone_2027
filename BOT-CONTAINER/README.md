@@ -302,7 +302,7 @@ container's own secret can travel on the same request.
 
 ## 5. Pointing the Chrome extension at it
 
-Already done in `astra-platform/chrome-extension`. What changed:
+Already done in `astra-extras/chrome-extension`. What changed:
 
 - `config.js` gained `BOT_API_BASE` (`http://localhost:3001`),
   `BOT_DISPATCH_PATH` and `BOT_API_TOKEN`.
@@ -320,7 +320,7 @@ If you set `BOT_API_TOKEN` in `.env`, set the same string in `config.js`.
 
 The dashboard's `/api/bot/summon` is left in place. It is no longer what the
 button calls, but it authenticates the caller, checks leadership against the
-database and writes the request to `_sent_data_extension/` — a useful capture
+database and writes the request to `astra-extras/_sent_data_extension/` — a useful capture
 point while this is all still being wired up.
 
 ---

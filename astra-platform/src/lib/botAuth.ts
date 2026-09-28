@@ -14,7 +14,7 @@ import path from "node:path";
  * in front of it. So in Phase 1 this runs where `npm run dev` runs — the
  * leader's own machine — and the resulting session is written to
  *
- *     bot-auth/secrets/leaders/{user_id}/auth.json
+ *     ../astra-extras/bot-auth/secrets/leaders/{user_id}/auth.json
  *
  * PHASE 2: that file is uploaded to Supabase Storage under the key
  *     leaders/{user_id}/auth.json
@@ -35,7 +35,7 @@ export const BOT_AUTH_ENABLED_ENV = "ASTRA_ALLOW_LOCAL_BOT_AUTH";
 
 /** Repository-relative home of the Playwright script and its output. */
 function botAuthDir(): string {
-  return path.join(process.cwd(), "bot-auth");
+  return path.resolve(process.cwd(), "../astra-extras/bot-auth");
 }
 
 export function leaderPaths(userId: string) {
@@ -51,7 +51,7 @@ export function leaderPaths(userId: string) {
 
 /** Whether the local flow is permitted in this deployment. */
 export function localBotAuthEnabled(): boolean {
-  return process.env[BOT_AUTH_ENABLED_ENV] === "1";
+  return process.env.NODE_ENV === "development" && process.env[BOT_AUTH_ENABLED_ENV] === "1";
 }
 
 export type BotAuthState = "none" | "authenticated" | "expired" | "failed";
@@ -103,6 +103,7 @@ interface MetaFile {
  * left behind by a deleted session cannot report success.
  */
 export async function readBotAuthStatus(userId: string): Promise<BotAuthStatus> {
+  if (!localBotAuthEnabled()) return { ...EMPTY };
   const paths = leaderPaths(userId);
 
   const filePresent = await stat(paths.auth).then(
@@ -162,6 +163,9 @@ export async function readBotAuthStatus(userId: string): Promise<BotAuthStatus> 
 
 /** Remove a leader's local credentials entirely. */
 export async function deleteBotAuth(userId: string): Promise<void> {
+  if (!localBotAuthEnabled()) {
+    throw new BotAuthError(503, "Manage local bot credentials from Astra running on your own machine.");
+  }
   // PHASE 2: also delete the Supabase Storage object at
   // `leaders/{user_id}/auth.json`, otherwise revoking locally would leave a
   // usable session in the bucket.
@@ -300,7 +304,7 @@ export function startBotAuth(userId: string): AuthRun {
     run.finishedAt = Date.now();
     run.child = null;
     // PHASE 2: on success, upload
-    //   bot-auth/secrets/leaders/{userId}/auth.json
+    //   ../astra-extras/bot-auth/secrets/leaders/{userId}/auth.json
     // to Supabase Storage as `leaders/{userId}/auth.json` in a private bucket,
     // then record the returned object key as `storage_path`. Doing it here,
     // rather than in the route, means it happens exactly once per successful

@@ -18,7 +18,7 @@ import type {
  * Server-side reads for the pages.
  *
  * Every query here runs as the signed-in user, so the RLS policies in
- * supabase/schema.sql are what decide visibility — none of these functions
+ * ../astra-extras/supabase/schema.sql are what decide visibility — none of these functions
  * filter by user id themselves, and adding such a filter would be a sign the
  * policy is wrong rather than a belt-and-braces improvement.
  */
@@ -169,7 +169,7 @@ export async function getLeaderBotStatus(
       "[astra] could not read bot status:",
       error.message,
       error.code === "PGRST205"
-        ? "— run supabase/FIX_bot_credentials.sql"
+        ? "— run ../astra-extras/supabase/FIX_bot_credentials.sql"
         : "",
     );
     return "unknown";

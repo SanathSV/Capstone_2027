@@ -1,5 +1,5 @@
 /**
- * Row shapes for the tables created by supabase/schema.sql.
+ * Row shapes for the tables created by ../astra-extras/supabase/schema.sql.
  *
  * Hand-written rather than generated so the file stays readable, but kept in
  * exact lockstep with the DDL — if you add a column there, add it here.
