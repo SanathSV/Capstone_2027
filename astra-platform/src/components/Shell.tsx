@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { SignOutButton } from "./SignOutButton";
 import { ThemeToggle } from "./ThemeToggle";
+import { ChatButton, TeamChatProvider, type ChatTeam } from "./TeamChat";
 import {
   NavigationProgress,
   NavigationProvider,
@@ -26,13 +27,16 @@ const NAV = [
 
 export function Shell({
   email,
+  chatTeams,
   children,
 }: {
   email: string;
+  chatTeams: ChatTeam[];
   children: React.ReactNode;
 }) {
   return (
     <NavigationProvider>
+      <TeamChatProvider teams={chatTeams}>
       <div className="min-h-screen">
         <header className="sticky top-0 z-20 border-b border-ink-800/80 bg-ink-950/70 backdrop-blur-xl">
           <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-6">
@@ -51,6 +55,12 @@ export function Shell({
               <span className="hidden max-w-[18ch] truncate text-xs text-slate-400 lg:block">
                 {email}
               </span>
+              <ChatButton
+                label="Ask Astra"
+                className="hidden items-center gap-1.5 rounded-full bg-astra-500/15 px-3.5 py-2
+                           text-xs font-medium text-astra-300 transition duration-200
+                           ease-emphasized hover:bg-astra-500/25 sm:inline-flex"
+              />
               <ThemeToggle />
               <Avatar email={email} />
               <SignOutButton />
@@ -60,7 +70,8 @@ export function Shell({
         </header>
 
         <main className="mx-auto max-w-7xl px-6 py-10">{children}</main>
-      </div>
+        </div>
+      </TeamChatProvider>
     </NavigationProvider>
   );
 }

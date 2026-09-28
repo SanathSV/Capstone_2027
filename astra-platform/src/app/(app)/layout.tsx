@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/Shell";
+import { getDashboardTeams } from "@/lib/db/queries";
 import { getSessionUser } from "@/lib/supabase/server";
 
 /**
@@ -31,5 +32,23 @@ export default async function AppLayout({
   // belt-and-braces case where a session expires between the two.
   if (!user) redirect("/login");
 
-  return <Shell email={user.email ?? ""}>{children}</Shell>;
+  // Loaded here rather than per-page so the chat panel's team switcher is
+  // populated on every screen — including Settings, where there is no other
+  // reason to know what teams exist. It is one query the dashboard was making
+  // anyway, and the layout is not re-rendered on navigation.
+  //
+  // TEAMS YOU LEAD ONLY. Astra answers from the team's sprint context, and
+  // assembling that reads the team's stored GitHub/Jira credentials — which RLS
+  // restricts to the leader. A member could only ever have been served a cached
+  // briefing they could not refresh, so the feature was quietly worse for them
+  // than for anybody else. Better to scope it honestly than to ship a degraded
+  // version and explain it in a tooltip.
+  const { lead } = await getDashboardTeams(user.id);
+  const chatTeams = lead.map((t) => ({ id: t.id, name: t.name, i_lead: true }));
+
+  return (
+    <Shell email={user.email ?? ""} chatTeams={chatTeams}>
+      {children}
+    </Shell>
+  );
 }

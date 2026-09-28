@@ -153,3 +153,61 @@ export interface BotCredential {
   updated_at: string;
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Meetings and transcripts
+// ---------------------------------------------------------------------------
+// Written by BOT-CONTAINER, never by the dashboard — which is why the app only
+// ever reads them and the grants in GOD.sql give `authenticated` select and
+// nothing else. A transcript that could be edited after the fact would not be
+// a record of what was said.
+
+export type MeetingStatus =
+  | "queued"
+  | "launching"
+  | "joining"
+  | "waiting_admission"
+  | "in_call"
+  | "leaving"
+  | "ended"
+  | "failed";
+
+export interface Meeting {
+  id: Uuid;
+  /** Null when the summon's team id matched no team; `team_ref` still holds it. */
+  team_id: Uuid | null;
+  team_ref: string;
+  /** Per-team counter assigned by a trigger: "meeting #7 for Astra_dev". */
+  meeting_number: number;
+  meet_link: string;
+  session_id: Uuid | null;
+  status: MeetingStatus;
+  google_account: string | null;
+  summary: string | null;
+  error: string | null;
+  transcript_lines: number;
+  questions_answered: number;
+  joined_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What a transcript row is: speech, or the bot's own question and answer. */
+export type TranscriptKind = "speech" | "question" | "answer" | "system";
+
+export interface TranscriptLine {
+  id: Uuid;
+  meeting_id: Uuid;
+  speaker_name: string;
+  content: string;
+  kind: TranscriptKind;
+  /** The browser's clock, from the caption block. Order by this, not created_at. */
+  spoken_at: string;
+  created_at: string;
+}
+
+export interface MeetingDetail {
+  meeting: Meeting;
+  transcript: TranscriptLine[];
+}
