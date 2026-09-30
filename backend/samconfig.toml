@@ -1,0 +1,14 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "astra-dev"
+resolve_s3 = true
+s3_prefix = "astra-dev"
+region = "ap-south-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=\"dev\" AstraEmployeesTableName=\"AstraEmployees\" AstraProjectsTableName=\"AstraProjects\" AstraProjectMembershipsTableName=\"AstraProjectMemberships\" AstraProjectStateTableName=\"AstraProjectState\""
+image_repositories = []
+
+[default.global.parameters]
+region = "ap-south-2"

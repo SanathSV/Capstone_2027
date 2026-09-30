@@ -1,0 +1,498 @@
+{
+  "astra_schema_version": "1.0",
+  "database": "DynamoDB",
+
+  "tables": {
+
+    "AstraEmployees": {
+      "description": "Master employee records",
+      "primary_key": {
+        "partition_key": "employee_id"
+      },
+
+      "attributes": {
+        "employee_id": "string",
+        "name": "string",
+        "email": "string",
+        "role": "string",
+        "department": "string",
+        "manager_id": "string|null",
+        "employment_status": "ACTIVE|INACTIVE|ON_LEAVE",
+        "agent": {
+          "device_id": "string|null",
+          "agent_version": "string|null",
+          "status": "ONLINE|OFFLINE|UNKNOWN",
+          "last_heartbeat": "ISO-8601 datetime|null"
+        },
+        "created_at": "ISO-8601 datetime",
+        "updated_at": "ISO-8601 datetime"
+      },
+
+      "example": {
+        "employee_id": "EMP_001",
+        "name": "Employee A",
+        "email": "employee@company.com",
+        "role": "Software Engineer",
+        "department": "Engineering",
+        "manager_id": "EMP_010",
+        "employment_status": "ACTIVE",
+        "agent": {
+          "device_id": "DEVICE_001",
+          "agent_version": "1.0.0",
+          "status": "ONLINE",
+          "last_heartbeat": "2026-09-30T16:00:00Z"
+        },
+        "created_at": "2026-09-01T10:00:00Z",
+        "updated_at": "2026-09-30T16:00:00Z"
+      }
+    },
+
+
+    "AstraProjects": {
+      "description": "Master project records and external integrations",
+      "primary_key": {
+        "partition_key": "project_id"
+      },
+
+      "attributes": {
+        "project_id": "string",
+        "name": "string",
+        "description": "string",
+        "status": "PLANNED|ACTIVE|ON_HOLD|COMPLETED|ARCHIVED",
+        "owner_employee_id": "string",
+        "department": "string",
+
+        "github": {
+          "provider": "github",
+          "organization": "string",
+          "repository": "string",
+          "repository_id": "string",
+          "default_branch": "string",
+          "installation_id": "string"
+        },
+
+        "jira": {
+          "provider": "jira",
+          "cloud_id": "string",
+          "project_key": "string"
+        },
+
+        "created_at": "ISO-8601 datetime",
+        "updated_at": "ISO-8601 datetime"
+      },
+
+      "example": {
+        "project_id": "PROJ_001",
+        "name": "Astra",
+        "description": "Productivity intelligence platform",
+        "status": "ACTIVE",
+        "owner_employee_id": "EMP_010",
+        "department": "Engineering",
+
+        "github": {
+          "provider": "github",
+          "organization": "my-company",
+          "repository": "astra",
+          "repository_id": "123456",
+          "default_branch": "main",
+          "installation_id": "github-installation-123"
+        },
+
+        "jira": {
+          "provider": "jira",
+          "cloud_id": "cloud-123",
+          "project_key": "ASTRA"
+        },
+
+        "created_at": "2026-09-01T10:00:00Z",
+        "updated_at": "2026-09-30T16:00:00Z"
+      }
+    },
+
+
+    "AstraProjectMemberships": {
+      "description": "Maps employees and teams to projects",
+
+      "primary_key": {
+        "partition_key": "PK",
+        "sort_key": "SK"
+      },
+
+      "gsis": {
+
+        "EmployeeProjectsIndex": {
+          "partition_key": "GSI1PK",
+          "sort_key": "GSI1SK",
+          "purpose": "Get every project an employee belongs to"
+        },
+
+        "ProjectTeamEmployeesIndex": {
+          "partition_key": "GSI2PK",
+          "sort_key": "GSI2SK",
+          "purpose": "Get every employee belonging to a team within a project"
+        }
+      },
+
+      "employee_membership": {
+        "keys": {
+          "PK": "PROJECT#{project_id}",
+          "SK": "EMPLOYEE#{employee_id}",
+
+          "GSI1PK": "EMPLOYEE#{employee_id}",
+          "GSI1SK": "PROJECT#{project_id}",
+
+          "GSI2PK": "PROJECT#{project_id}#TEAM#{team_id}",
+          "GSI2SK": "EMPLOYEE#{employee_id}"
+        },
+
+        "attributes": {
+          "entity_type": "PROJECT_EMPLOYEE",
+          "project_id": "string",
+          "employee_id": "string",
+          "team_id": "string",
+          "role": "string",
+          "allocation_percentage": "number",
+          "status": "ACTIVE|INACTIVE",
+          "joined_at": "ISO-8601 datetime",
+          "updated_at": "ISO-8601 datetime"
+        }
+      },
+
+      "team_record": {
+        "keys": {
+          "PK": "PROJECT#{project_id}",
+          "SK": "TEAM#{team_id}"
+        },
+
+        "attributes": {
+          "entity_type": "PROJECT_TEAM",
+          "project_id": "string",
+          "team_id": "string",
+          "name": "string",
+          "description": "string",
+          "team_lead_id": "string|null",
+          "status": "ACTIVE|INACTIVE",
+          "created_at": "ISO-8601 datetime",
+          "updated_at": "ISO-8601 datetime"
+        }
+      },
+
+      "employee_membership_example": {
+        "PK": "PROJECT#PROJ_001",
+        "SK": "EMPLOYEE#EMP_001",
+
+        "GSI1PK": "EMPLOYEE#EMP_001",
+        "GSI1SK": "PROJECT#PROJ_001",
+
+        "GSI2PK": "PROJECT#PROJ_001#TEAM#BACKEND",
+        "GSI2SK": "EMPLOYEE#EMP_001",
+
+        "entity_type": "PROJECT_EMPLOYEE",
+        "project_id": "PROJ_001",
+        "employee_id": "EMP_001",
+        "team_id": "TEAM_BACKEND",
+        "role": "BACKEND_ENGINEER",
+        "allocation_percentage": 60,
+        "status": "ACTIVE",
+        "joined_at": "2026-09-01T10:00:00Z",
+        "updated_at": "2026-09-30T16:00:00Z"
+      },
+
+      "team_example": {
+        "PK": "PROJECT#PROJ_001",
+        "SK": "TEAM#BACKEND",
+
+        "entity_type": "PROJECT_TEAM",
+        "project_id": "PROJ_001",
+        "team_id": "TEAM_BACKEND",
+        "name": "Backend Team",
+        "description": "Astra backend engineering",
+        "team_lead_id": "EMP_010",
+        "status": "ACTIVE",
+        "created_at": "2026-09-01T10:00:00Z",
+        "updated_at": "2026-09-30T16:00:00Z"
+      }
+    },
+
+
+    "AstraProjectState": {
+      "description": "Single source of truth for current project state, tasks, progress, evidence and state history",
+
+      "primary_key": {
+        "partition_key": "PK",
+        "sort_key": "SK"
+      },
+
+      "gsis": {
+
+        "EmployeeTasksIndex": {
+          "partition_key": "GSI1PK",
+          "sort_key": "GSI1SK",
+          "purpose": "Get every task assigned to an employee"
+        },
+
+        "TeamTasksIndex": {
+          "partition_key": "GSI2PK",
+          "sort_key": "GSI2SK",
+          "purpose": "Get every task assigned to a team"
+        }
+      },
+
+      "project_state": {
+        "keys": {
+          "PK": "PROJECT#{project_id}",
+          "SK": "STATE"
+        },
+
+        "attributes": {
+          "entity_type": "PROJECT_STATE",
+          "project_id": "string",
+
+          "status": "PLANNED|IN_PROGRESS|ON_HOLD|COMPLETED|ARCHIVED",
+
+          "health": "ON_TRACK|AT_RISK|BLOCKED",
+
+          "completion_percentage": "number",
+
+          "total_tasks": "number",
+          "completed_tasks": "number",
+          "in_progress_tasks": "number",
+          "blocked_tasks": "number",
+
+          "last_activity_at": "ISO-8601 datetime",
+          "last_updated_at": "ISO-8601 datetime",
+
+          "version": "number"
+        }
+      },
+
+      "task": {
+        "keys": {
+          "PK": "PROJECT#{project_id}",
+          "SK": "TASK#{task_id}"
+        },
+
+        "gsis": {
+          "GSI1PK": "EMPLOYEE#{assignee_id}",
+          "GSI1SK": "PROJECT#{project_id}#TASK#{task_id}",
+
+          "GSI2PK": "TEAM#{team_id}",
+          "GSI2SK": "PROJECT#{project_id}#TASK#{task_id}"
+        },
+
+        "attributes": {
+          "entity_type": "TASK",
+
+          "project_id": "string",
+          "task_id": "string",
+
+          "jira_issue_key": "string|null",
+
+          "title": "string",
+          "description": "string|null",
+
+          "assignee_id": "string|null",
+          "team_id": "string|null",
+
+          "status": "NOT_STARTED|IN_PROGRESS|LIKELY_COMPLETE|VERIFIED_COMPLETE|BLOCKED|UNKNOWN",
+
+          "progress": "number",
+
+          "priority": "LOW|MEDIUM|HIGH|CRITICAL",
+
+          "estimated_hours": "number|null",
+          "actual_hours": "number|null",
+
+          "acceptance_criteria": [
+            "string"
+          ],
+
+          "started_at": "ISO-8601 datetime|null",
+          "last_activity_at": "ISO-8601 datetime|null",
+          "completed_at": "ISO-8601 datetime|null",
+
+          "astra_confidence": "number|null",
+
+          "last_evidence": {
+            "type": "string",
+            "source_id": "string",
+            "timestamp": "ISO-8601 datetime"
+          },
+
+          "created_at": "ISO-8601 datetime",
+          "updated_at": "ISO-8601 datetime"
+        }
+      },
+
+      "progress_event": {
+        "keys": {
+          "PK": "PROJECT#{project_id}",
+          "SK": "TASK#{task_id}#EVENT#{timestamp}"
+        },
+
+        "attributes": {
+          "entity_type": "TASK_PROGRESS_EVENT",
+
+          "project_id": "string",
+          "task_id": "string",
+
+          "event_type": "PROGRESS_UPDATE|STATE_CHANGE|EVIDENCE_ADDED|MANUAL_OVERRIDE",
+
+          "old_status": "string|null",
+          "new_status": "string|null",
+
+          "old_progress": "number|null",
+          "new_progress": "number|null",
+
+          "confidence": "number|null",
+
+          "source": "ASTRA_ENGINE|GITHUB|JIRA|CI|HUMAN",
+
+          "evidence_ids": [
+            "string"
+          ],
+
+          "model_version": "string|null",
+          "rule_version": "string|null",
+
+          "reason": "string|null",
+
+          "created_at": "ISO-8601 datetime"
+        }
+      },
+
+      "task_evidence": {
+        "keys": {
+          "PK": "PROJECT#{project_id}",
+          "SK": "TASK#{task_id}#EVIDENCE#{evidence_id}"
+        },
+
+        "attributes": {
+          "entity_type": "TASK_EVIDENCE",
+
+          "project_id": "string",
+          "task_id": "string",
+          "evidence_id": "string",
+
+          "type": "GITHUB_COMMIT|GITHUB_PR|GITHUB_REVIEW|CI_TEST|FILE_ACTIVITY|JIRA_UPDATE|AGENT_ACTIVITY",
+
+          "source_id": "string",
+
+          "confidence": "number|null",
+
+          "data": {},
+
+          "created_at": "ISO-8601 datetime"
+        }
+      }
+    }
+  },
+
+
+  "relationships": {
+
+    "employee_to_projects": {
+      "source": "AstraProjectMemberships",
+      "index": "EmployeeProjectsIndex",
+      "query": "GSI1PK = EMPLOYEE#{employee_id}"
+    },
+
+    "project_to_employees": {
+      "source": "AstraProjectMemberships",
+      "query": "PK = PROJECT#{project_id}, SK begins_with EMPLOYEE#"
+    },
+
+    "project_to_teams": {
+      "source": "AstraProjectMemberships",
+      "query": "PK = PROJECT#{project_id}, SK begins_with TEAM#"
+    },
+
+    "team_to_employees": {
+      "source": "AstraProjectMemberships",
+      "index": "ProjectTeamEmployeesIndex",
+      "query": "GSI2PK = PROJECT#{project_id}#TEAM#{team_id}"
+    },
+
+    "project_to_tasks": {
+      "source": "AstraProjectState",
+      "query": "PK = PROJECT#{project_id}, SK begins_with TASK#"
+    },
+
+    "employee_to_tasks": {
+      "source": "AstraProjectState",
+      "index": "EmployeeTasksIndex",
+      "query": "GSI1PK = EMPLOYEE#{employee_id}"
+    },
+
+    "team_to_tasks": {
+      "source": "AstraProjectState",
+      "index": "TeamTasksIndex",
+      "query": "GSI2PK = TEAM#{team_id}"
+    },
+
+    "task_to_history": {
+      "source": "AstraProjectState",
+      "query": "PK = PROJECT#{project_id}, SK begins_with TASK#{task_id}#EVENT#"
+    },
+
+    "task_to_evidence": {
+      "source": "AstraProjectState",
+      "query": "PK = PROJECT#{project_id}, SK begins_with TASK#{task_id}#EVIDENCE#"
+    }
+  },
+
+
+  "external_secrets": {
+    "description": "Secrets should not be stored directly in DynamoDB",
+
+    "recommended_service": "AWS Secrets Manager",
+
+    "secrets": {
+      "github": {
+        "github_app_private_key": "AWS Secrets Manager",
+        "github_client_secret": "AWS Secrets Manager"
+      },
+
+      "jira": {
+        "jira_credentials": "AWS Secrets Manager"
+      }
+    },
+
+    "stored_in_projects": {
+      "github.installation_id": "reference only",
+      "jira.cloud_id": "reference only"
+    }
+  },
+
+
+  "status_model": {
+
+    "project": [
+      "PLANNED",
+      "IN_PROGRESS",
+      "ON_HOLD",
+      "COMPLETED",
+      "ARCHIVED"
+    ],
+
+    "task": [
+      "NOT_STARTED",
+      "IN_PROGRESS",
+      "LIKELY_COMPLETE",
+      "VERIFIED_COMPLETE",
+      "BLOCKED",
+      "UNKNOWN"
+    ],
+
+    "employee": [
+      "ACTIVE",
+      "INACTIVE",
+      "ON_LEAVE"
+    ],
+
+    "team": [
+      "ACTIVE",
+      "INACTIVE"
+    ]
+  }
+}

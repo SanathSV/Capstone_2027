@@ -1,0 +1,79 @@
+# OS and editor files
+.DS_Store
+.AppleDouble
+.LSOverride
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# AWS SAM and local deployment artifacts
+.aws-sam/
+.sam/
+
+# Node.js and frontend build artifacts
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+.yarn-cache/
+.next/
+out/
+.nuxt/
+.svelte-kit/
+coverage/
+*.tsbuildinfo
+
+# Rust build artifacts
+**/target/
+
+# General build and temporary files
+*.tmp
+*.temp
+*.bak
+*.cache
+*.pid
+*.seed
+*.log
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3

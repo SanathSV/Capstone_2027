@@ -1,0 +1,266 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ASTRA DynamoDB base layer
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Deployment environment used for resource tags.
+  AstraEmployeesTableName:
+    Type: String
+    Default: AstraEmployees
+    Description: DynamoDB table name for employee records.
+  AstraProjectsTableName:
+    Type: String
+    Default: AstraProjects
+    Description: DynamoDB table name for project records.
+  AstraProjectMembershipsTableName:
+    Type: String
+    Default: AstraProjectMemberships
+    Description: DynamoDB table name for project memberships.
+  AstraProjectStateTableName:
+    Type: String
+    Default: AstraProjectState
+    Description: DynamoDB table name for project state, tasks, evidence, and history.
+
+Resources:
+  AstraEmployees:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref AstraEmployeesTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: Astra
+        - Key: Environment
+          Value: !Ref Environment
+
+  AstraProjects:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref AstraProjectsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: project_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: project_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: Astra
+        - Key: Environment
+          Value: !Ref Environment
+
+  AstraProjectMemberships:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref AstraProjectMembershipsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: EmployeeProjectsIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ProjectTeamEmployeesIndex
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: Astra
+        - Key: Environment
+          Value: !Ref Environment
+
+  AstraProjectState:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref AstraProjectStateTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: EmployeeTasksIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: TeamTasksIndex
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: Astra
+        - Key: Environment
+          Value: !Ref Environment
+
+  AstraEmployeeApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: app.main.handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          DYNAMODB_EMPLOYEES_TABLE: !Ref AstraEmployeesTableName
+          DYNAMODB_PROJECTS_TABLE: !Ref AstraProjectsTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AstraEmployeesTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AstraProjectsTableName
+      Events:
+        CreateEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/employees
+            Method: post
+        GetEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/employees/{employee_id}
+            Method: get
+        ListEmployees:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/employees
+            Method: get
+        UpdateEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/employees/{employee_id}
+            Method: patch
+        RegisterAgent:
+          Type: Api
+          Properties:
+            Path: /api/v1/agent/register
+            Method: post
+        AgentHeartbeat:
+          Type: Api
+          Properties:
+            Path: /api/v1/agent/heartbeat
+            Method: post
+        CreateProject:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects
+            Method: post
+        GetProject:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}
+            Method: get
+        ListProjects:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects
+            Method: get
+        UpdateProject:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}
+            Method: patch
+
+Outputs:
+  AstraEmployeesTableName:
+    Description: AstraEmployees DynamoDB table name.
+    Value: !Ref AstraEmployees
+  AstraEmployeesTableArn:
+    Description: AstraEmployees DynamoDB table ARN.
+    Value: !GetAtt AstraEmployees.Arn
+
+  AstraProjectsTableName:
+    Description: AstraProjects DynamoDB table name.
+    Value: !Ref AstraProjects
+  AstraProjectsTableArn:
+    Description: AstraProjects DynamoDB table ARN.
+    Value: !GetAtt AstraProjects.Arn
+
+  AstraProjectMembershipsTableName:
+    Description: AstraProjectMemberships DynamoDB table name.
+    Value: !Ref AstraProjectMemberships
+  AstraProjectMembershipsTableArn:
+    Description: AstraProjectMemberships DynamoDB table ARN.
+    Value: !GetAtt AstraProjectMemberships.Arn
+
+  AstraProjectStateTableName:
+    Description: AstraProjectState DynamoDB table name.
+    Value: !Ref AstraProjectState
+  AstraProjectStateTableArn:
+    Description: AstraProjectState DynamoDB table ARN.
+    Value: !GetAtt AstraProjectState.Arn
