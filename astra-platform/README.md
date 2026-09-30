@@ -21,6 +21,32 @@ Captured requests are optional: `ASTRA_DUMP_REQUESTS=1` enables captures during
 development, written to `../astra-extras/_sent_data_extension`. Both features are
 disabled in production, even if their environment flags are set.
 
+## Build the website independently
+
+From the `Capstone_2027` repository root:
+
+```sh
+cd astra-platform
+npm ci
+npm run build
+npm start
+```
+
+Use Node.js 22 and configure `.env.local` as described above. `npm ci` is needed
+on a fresh checkout or after dependency changes. `npm run build` produces the
+website in `.next`; `npm start` serves that production build on port 3000.
+Neither command requires the extension, Python, `astra-extras`, or `BOT-CONTAINER`.
+The running website still needs its Supabase environment variables and database.
+
+You can also build without changing directories, from the repository root:
+
+```sh
+npm --prefix astra-platform run build
+```
+
+For Cloudflare deployment, use `npm run build:cloudflare` instead: it also packages
+the Next.js build as a Worker. The settings below use that command.
+
 ## Cloudflare Workers
 
 The repository root is `Capstone_2027`. In the Cloudflare Git build form use:
