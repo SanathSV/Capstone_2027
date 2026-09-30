@@ -5,13 +5,17 @@ from fastapi import FastAPI
 from mangum import Mangum
 
 from app.api.employees import router as employee_router
+from app.api.memberships import router as membership_router
 from app.api.projects import router as project_router
+from app.api.tasks import router as task_router
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="ASTRA API", version="1.0.0")
 app.include_router(employee_router)
 app.include_router(project_router)
+app.include_router(membership_router)
+app.include_router(task_router)
 
 handler = Mangum(app)
 

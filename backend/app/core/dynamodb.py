@@ -21,3 +21,17 @@ def get_projects_table():
     if not settings.dynamodb_projects_table:
         raise RuntimeError("DYNAMODB_PROJECTS_TABLE must be configured")
     return get_dynamodb_resource().Table(settings.dynamodb_projects_table)
+
+
+def get_project_memberships_table():
+    settings = get_settings()
+    if not settings.dynamodb_memberships_table:
+        raise RuntimeError("DYNAMODB_MEMBERSHIPS_TABLE must be configured")
+    return get_dynamodb_resource().Table(settings.dynamodb_memberships_table)
+
+
+def get_project_state_table():
+    settings = get_settings()
+    if not settings.dynamodb_state_table:
+        raise RuntimeError("DYNAMODB_STATE_TABLE must be configured")
+    return get_dynamodb_resource().Table(settings.dynamodb_state_table)

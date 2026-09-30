@@ -179,11 +179,36 @@ Resources:
         Variables:
           DYNAMODB_EMPLOYEES_TABLE: !Ref AstraEmployeesTableName
           DYNAMODB_PROJECTS_TABLE: !Ref AstraProjectsTableName
+          DYNAMODB_MEMBERSHIPS_TABLE: !Ref AstraProjectMembershipsTableName
+          DYNAMODB_STATE_TABLE: !Ref AstraProjectStateTableName
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref AstraEmployeesTableName
         - DynamoDBCrudPolicy:
             TableName: !Ref AstraProjectsTableName
+        - Statement:
+            - Sid: MembershipTableAccess
+              Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !GetAtt AstraProjectMemberships.Arn
+                - !Sub '${AstraProjectMemberships.Arn}/index/*'
+        - Statement:
+            - Sid: ProjectStateTableAccess
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+                - dynamodb:TransactWriteItems
+              Resource:
+                - !GetAtt AstraProjectState.Arn
+                - !Sub '${AstraProjectState.Arn}/index/*'
       Events:
         CreateEmployee:
           Type: Api
@@ -235,6 +260,96 @@ Resources:
           Properties:
             Path: /api/v1/management/projects/{project_id}
             Method: patch
+        CreateTeam:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams
+            Method: post
+        ListTeams:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams
+            Method: get
+        GetTeam:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams/{team_id}
+            Method: get
+        UpdateTeam:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams/{team_id}
+            Method: patch
+        AddProjectEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/employees
+            Method: post
+        ListProjectEmployees:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/employees
+            Method: get
+        ListEmployeeProjects:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/employees/{employee_id}/projects
+            Method: get
+        UpdateProjectEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/employees/{employee_id}
+            Method: patch
+        AddTeamEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams/{team_id}/employees
+            Method: post
+        ListTeamEmployees:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams/{team_id}/employees
+            Method: get
+        RemoveProjectEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/employees/{employee_id}
+            Method: delete
+        RemoveTeamEmployee:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams/{team_id}/employees/{employee_id}
+            Method: delete
+        CreateTask:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/tasks
+            Method: post
+        ListProjectTasks:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/tasks
+            Method: get
+        GetTask:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/tasks/{task_id}
+            Method: get
+        UpdateTask:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/tasks/{task_id}
+            Method: patch
+        ListEmployeeTasks:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/employees/{employee_id}/tasks
+            Method: get
+        ListTeamTasks:
+          Type: Api
+          Properties:
+            Path: /api/v1/management/projects/{project_id}/teams/{team_id}/tasks
+            Method: get
 
 Outputs:
   AstraEmployeesTableName:
