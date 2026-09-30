@@ -145,7 +145,7 @@ export function BotAuthPanel({ initial }: { initial: Payload }) {
           </p>
         </div>
 
-        {!running && (
+        {!running && data.localFlowEnabled && (
           <div className="flex gap-2">
             {data.status.state === "authenticated" || data.status.filePresent ? (
               <>

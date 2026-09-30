@@ -2,20 +2,23 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   BotCredential,
   Employee,
-  Profile,
+  IntegrationsView,
+  Meeting,
+  MeetingDetail,
   PreContextRun,
+  Profile,
   Team,
+  TeamIntegrations,
   TeamMemberWithEmployee,
   TeamSummary,
-  IntegrationsView,
-  TeamIntegrations,
+  TranscriptLine,
 } from "./types";
 
 /**
  * Server-side reads for the pages.
  *
  * Every query here runs as the signed-in user, so the RLS policies in
- * supabase/schema.sql are what decide visibility — none of these functions
+ * ../astra-extras/supabase/schema.sql are what decide visibility — none of these functions
  * filter by user id themselves, and adding such a filter would be a sign the
  * policy is wrong rather than a belt-and-braces improvement.
  */
@@ -166,7 +169,7 @@ export async function getLeaderBotStatus(
       "[astra] could not read bot status:",
       error.message,
       error.code === "PGRST205"
-        ? "— run supabase/FIX_bot_credentials.sql"
+        ? "— run ../astra-extras/supabase/FIX_bot_credentials.sql"
         : "",
     );
     return "unknown";
@@ -251,4 +254,57 @@ export async function getRecentPreContextRuns(
 
   if (error) throw new Error(`Could not load previous runs: ${error.message}`);
   return (data ?? []) as PreContextRun[];
+}
+
+/**
+ * Every meeting the bot has held for a team, newest first.
+ *
+ * Matches on `team_id` OR `team_ref`, and the second half is not redundant: the
+ * container writes `team_id` null whenever its team lookup failed at summon
+ * time — a slow database, a team created seconds earlier — while `team_ref`
+ * still holds the id the extension sent. Selecting on `team_id` alone would
+ * hide a meeting with a full transcript in it, permanently.
+ */
+export async function getTeamMeetings(teamId: string): Promise<Meeting[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("meetings")
+    .select("*")
+    .or(`team_id.eq.${teamId},team_ref.eq.${teamId}`)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Meeting[];
+}
+
+/**
+ * One meeting and everything said in it.
+ *
+ * Ordered by `spoken_at` rather than `created_at`: the first is the browser's
+ * own timestamp for the caption block, the second is when the row reached
+ * Postgres — which is later, and under load differently ordered, because the
+ * container writes through a queue.
+ */
+export async function getMeetingDetail(meetingId: string): Promise<MeetingDetail | null> {
+  const supabase = createSupabaseServerClient();
+
+  const [{ data: meeting, error: mErr }, { data: lines, error: tErr }] = await Promise.all([
+    supabase.from("meetings").select("*").eq("id", meetingId).maybeSingle(),
+    supabase
+      .from("transcripts")
+      .select("*")
+      .eq("meeting_id", meetingId)
+      .order("spoken_at", { ascending: true })
+      .limit(2000),
+  ]);
+
+  if (mErr) throw new Error(mErr.message);
+  if (tErr) throw new Error(tErr.message);
+  if (!meeting) return null;
+
+  return {
+    meeting: meeting as Meeting,
+    transcript: (lines ?? []) as TranscriptLine[],
+  };
 }

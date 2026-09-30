@@ -1,0 +1,11 @@
+bot-auth/secrets/
+_sent_data_extension/
+**/auth.json
+**/meta.json
+**/storage_state.json
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.local
+node_modules/

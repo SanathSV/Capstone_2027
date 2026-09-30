@@ -54,11 +54,11 @@ const DIR_NAME = "_sent_data_extension";
 const KEEP_FILES = 50;
 
 export function dumpDir(): string {
-  return path.join(process.cwd(), DIR_NAME);
+  return path.resolve(process.cwd(), "../astra-extras", DIR_NAME);
 }
 
 export function dumpEnabled(): boolean {
-  return process.env.ASTRA_DUMP_REQUESTS !== "0";
+  return process.env.NODE_ENV === "development" && process.env.ASTRA_DUMP_REQUESTS === "1";
 }
 
 function redactEnabled(): boolean {

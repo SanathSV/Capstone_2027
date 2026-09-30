@@ -5,7 +5,7 @@ import { normaliseSupabaseUrl } from "./url";
 
 /**
  * Browser client. Carries the anon key only, so every read it makes is still
- * filtered by the RLS policies in supabase/schema.sql.
+ * filtered by the RLS policies in ../astra-extras/supabase/schema.sql.
  */
 export function createSupabaseBrowserClient() {
   return createBrowserClient(

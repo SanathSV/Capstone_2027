@@ -1,6 +1,7 @@
 "use client";
 
 import { InlineSpinner, useNavigation } from "./Navigation";
+import { ChatButton } from "./TeamChat";
 import type { TeamSummary } from "@/lib/db/types";
 
 /**
@@ -91,6 +92,9 @@ export function TeamCard({ team }: { team: TeamSummary }) {
             </span>
           </>
         )}
+        <span className="ml-auto shrink-0">
+          <ChatButton teamId={team.id} />
+        </span>
       </div>
     </a>
   );

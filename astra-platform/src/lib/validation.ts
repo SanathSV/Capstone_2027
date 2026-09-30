@@ -3,7 +3,7 @@ import { ApiError, cleanString } from "@/lib/api";
 /**
  * Directory handle validation, shared by the create and update routes.
  *
- * These rules mirror the CHECK constraints in supabase/schema.sql. Duplicating
+ * These rules mirror the CHECK constraints in ../astra-extras/supabase/schema.sql. Duplicating
  * them here is not belt-and-braces: the database would reject a bad handle with
  * "employees_slack_user_id_check", and a constraint name is not something to
  * put in front of someone filling in a form.

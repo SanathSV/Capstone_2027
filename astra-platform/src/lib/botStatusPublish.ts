@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { readBotAuthStatus, type BotAuthStatus } from "@/lib/botAuth";
+import { localBotAuthEnabled, readBotAuthStatus, type BotAuthStatus } from "@/lib/botAuth";
 
 /**
  * Mirrors a leader's on-disk bot status into `bot_credentials`.
@@ -26,6 +26,10 @@ export async function publishBotStatus(
 ): Promise<BotAuthStatus> {
   const status = await readBotAuthStatus(userId);
 
+  // A hosted website has no local session to publish. Do not overwrite the
+  // leader's existing bot record just because this machine has no auth file.
+  if (!localBotAuthEnabled()) return status;
+
   const { error } = await supabase.from("bot_credentials").upsert(
     {
       user_id: userId,
@@ -49,7 +53,7 @@ export async function publishBotStatus(
     // this table with it. Say so, rather than leaving a silently wrong badge.
     const hint =
       error.code === "PGRST205"
-        ? " — run supabase/schema.sql (it now creates bot_credentials), then " +
+        ? " — run ../astra-extras/supabase/schema.sql (it now creates bot_credentials), then " +
           "reload the schema cache under Settings → API"
         : "";
     console.error(`[astra:bot-status] could not publish: ${error.message}${hint}`);

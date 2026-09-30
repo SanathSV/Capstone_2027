@@ -5,6 +5,8 @@ import { IntegrationsForm } from "@/components/IntegrationsForm";
 import { PreContextPanel, StatusBadge } from "@/components/PreContextPanel";
 import { BotStatusBadge, type BadgeStatus } from "@/components/BotStatusBadge";
 import { TeamDescriptionEditor } from "@/components/TeamDescriptionEditor";
+import { MeetingsPanel } from "@/components/MeetingsPanel";
+import { ChatButton } from "@/components/TeamChat";
 import {
   getEmployees,
   getLeaderBotStatus,
@@ -12,6 +14,7 @@ import {
   getRecentPreContextRuns,
   getTeam,
   getTeamLeaderName,
+  getTeamMeetings,
   getTeamMembers,
 } from "@/lib/db/queries";
 import { createSupabaseServerClient, getSessionUser } from "@/lib/supabase/server";
@@ -72,7 +75,12 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
             }
           : { status: botStatus.status, email: botStatus.google_email };
 
-  const integrations = isLeader ? await getIntegrationsView(team.id) : null;
+  const [integrations, meetings] = await Promise.all([
+    isLeader ? getIntegrationsView(team.id) : Promise.resolve(null),
+    // Read by every member, not just the leader: a transcript is a record of
+    // a meeting the whole team was in.
+    getTeamMeetings(team.id),
+  ]);
   const anyIntegration = Boolean(
     integrations?.github.configured ||
       integrations?.jira.configured ||
@@ -103,6 +111,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                 subject={isLeader ? "Your bot" : `${leaderName ?? "The leader"}'s bot`}
                 googleEmail={badge.email}
               />
+              <ChatButton teamId={team.id} label="Ask Astra" />
             </div>
             <TeamDescriptionEditor
               teamId={team.id}
@@ -146,6 +155,10 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
             </div>
           )}
         </div>
+
+        {/* Above the run history on purpose: a meeting is the thing that
+            happened, a pre-context run is the machinery that briefed it. */}
+        <MeetingsPanel meetings={meetings} />
 
         {runs.length > 0 && <RunHistory runs={runs} />}
       </div>
