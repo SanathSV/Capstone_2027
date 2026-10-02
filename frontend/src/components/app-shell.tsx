@@ -1,0 +1,13 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BarChart3, BriefcaseBusiness, ChevronDown, CircleHelp, LayoutDashboard, Menu, Search, Settings2, Users, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+const navigation = [{ href: "/dashboard", label: "Overview", icon: LayoutDashboard }, { href: "/dashboard/projects", label: "Projects", icon: BriefcaseBusiness }, { href: "/dashboard/tasks", label: "Tasks", icon: CircleHelp }, { href: "/dashboard/workforce", label: "Workforce", icon: Users }, { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 }];
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname(); const [open, setOpen] = useState(false);
+  return <div className="app-shell"><aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark">A</span><span>ASTRA</span><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close navigation"><X size={18} /></button></div><div className="workspace-switcher"><span className="workspace-dot" /><span><small>Workspace</small><strong>Astra Labs</strong></span><ChevronDown size={15} /></div><nav><p className="nav-label">Workspace</p>{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={pathname === href || (href !== "/dashboard" && pathname.startsWith(href)) ? "active" : ""}><Icon size={17} />{label}</Link>)}<p className="nav-label nav-spacer">Manage</p><Link href="/dashboard/integrations" className={pathname.startsWith("/dashboard/integrations") ? "active" : ""}><span className="nav-icon">◎</span>Integrations</Link><Link href="/dashboard/settings" className={pathname.startsWith("/dashboard/settings") ? "active" : ""}><Settings2 size={17} />Settings</Link></nav><div className="sidebar-footer"><div className="avatar">PB</div><div><strong>Project admin</strong><small>admin@astralabs.dev</small></div><ChevronDown size={15} /></div></aside><main className="main-content"><header className="topbar"><button className="mobile-menu" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={20} /></button><div className="global-search"><Search size={17} /><span>Search anything</span><kbd>⌘ K</kbd></div><div className="topbar-actions"><button className="icon-button" aria-label="Notifications">◌<span className="notification-dot" /></button><div className="avatar small">PB</div></div></header>{children}</main>{open && <button className="mobile-overlay" onClick={() => setOpen(false)} aria-label="Close navigation" />}</div>;
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the ASTRA Employee, Project, Team, and Membership APIs."""
+"""Exercise the ASTRA Employee, Project, Team, Membership, and Task APIs."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from urllib.request import Request, urlopen
 class ApiLogger:
     def __init__(self, log_path: Path):
         self.log_path = log_path
+        self.total_requests = 0
+        self.failed_requests = 0
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.file = log_path.open("w", encoding="utf-8")
 
@@ -63,6 +65,7 @@ def call_api(
 
     request = Request(url, data=body, headers=headers, method=method)
     started = time.perf_counter()
+    logger.total_requests += 1
     try:
         with urlopen(request, timeout=30) as response:
             status_code = response.status
@@ -87,6 +90,8 @@ def call_api(
     logger.write(f"{method} {url}")
     logger.write(f"STATUS: {status_code} | TIME_MS: {elapsed_ms:.1f}")
     logger.write(f"RESPONSE: {compact_body(response_body)}")
+    if status_code < 200 or status_code >= 300:
+        logger.failed_requests += 1
     logger.write()
     return status_code, response_body
 
@@ -102,13 +107,18 @@ def main() -> int:
     project_id = f"PROJ_TEST_{suffix}"
     team_one_id = f"TEAM_TEST_1_{suffix}"
     team_two_id = f"TEAM_TEST_2_{suffix}"
+    task_one_id = f"TASK_TEST_1_{suffix}"
+    task_two_id = f"TASK_TEST_2_{suffix}"
     device_id = f"DEVICE_TEST_{suffix}"
     base_url = args.base_url.rstrip("/")
 
     logger.write(f"ASTRA API endpoint test started: {timestamp}")
     logger.write(f"BASE_URL: {base_url}")
     logger.write(f"LOG_FILE: {log_path}")
-    logger.write(f"TEST_IDS: {employee_id}, {project_id}, {team_one_id}, {team_two_id}")
+    logger.write(
+        f"TEST_IDS: {employee_id}, {project_id}, {team_one_id}, {team_two_id}, "
+        f"{task_one_id}, {task_two_id}"
+    )
     logger.write()
 
     try:
@@ -271,6 +281,79 @@ def main() -> int:
             "GET",
             f"/api/v1/management/projects/{project_id}/teams/{team_two_id}/employees",
         )
+
+        call_api(
+            logger,
+            base_url,
+            "POST",
+            f"/api/v1/management/projects/{project_id}/tasks",
+            {
+                "task_id": task_one_id,
+                "title": "Test deployed Task API",
+                "description": "Verify task creation and retrieval",
+                "jira_issue_key": "ASTRA-TEST-001",
+                "assignee_id": employee_id,
+                "team_id": team_two_id,
+                "status": "NOT_STARTED",
+                "progress": 0,
+                "priority": "HIGH",
+                "estimated_hours": 4,
+                "actual_hours": 0,
+                "acceptance_criteria": [
+                    "Task is created",
+                    "Task appears in project task queries",
+                ],
+            },
+        )
+        call_api(
+            logger,
+            base_url,
+            "POST",
+            f"/api/v1/management/projects/{project_id}/tasks",
+            {
+                "task_id": task_two_id,
+                "title": "Test task assignment",
+                "description": "Verify employee and team task indexes",
+                "assignee_id": second_employee_id,
+                "team_id": team_two_id,
+                "priority": "MEDIUM",
+                "acceptance_criteria": ["Task is assigned"],
+            },
+        )
+        call_api(
+            logger,
+            base_url,
+            "GET",
+            f"/api/v1/management/projects/{project_id}/tasks",
+        )
+        call_api(
+            logger,
+            base_url,
+            "GET",
+            f"/api/v1/management/projects/{project_id}/tasks/{task_one_id}",
+        )
+        call_api(
+            logger,
+            base_url,
+            "PATCH",
+            f"/api/v1/management/projects/{project_id}/tasks/{task_one_id}",
+            {
+                "title": "Updated deployed Task API test",
+                "actual_hours": 1,
+            },
+        )
+        call_api(
+            logger,
+            base_url,
+            "GET",
+            f"/api/v1/management/employees/{employee_id}/tasks",
+        )
+        call_api(
+            logger,
+            base_url,
+            "GET",
+            f"/api/v1/management/projects/{project_id}/teams/{team_two_id}/tasks",
+        )
         call_api(
             logger,
             base_url,
@@ -284,9 +367,12 @@ def main() -> int:
             f"/api/v1/management/projects/{project_id}/employees/{employee_id}",
         )
 
-        logger.write("TEST COMPLETE")
+        logger.write(
+            f"TEST COMPLETE | REQUESTS: {logger.total_requests} | "
+            f"FAILURES: {logger.failed_requests}"
+        )
         logger.write(f"Full output saved to: {log_path}")
-        return 0
+        return 1 if logger.failed_requests else 0
     finally:
         logger.close()
 

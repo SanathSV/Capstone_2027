@@ -1,9 +1,9 @@
 import base64
 import json
+from decimal import Decimal
 from typing import Any
 
 from boto3.dynamodb.conditions import Attr, Key
-from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 
@@ -22,66 +22,21 @@ class TaskRepositoryValidationError(Exception):
 class TaskRepository:
     def __init__(self, table: Any):
         self.table = table
-        self.serializer = TypeSerializer()
 
     def create_with_state(self, item: dict[str, Any]) -> dict[str, Any]:
-        client = self.table.meta.client
-        state_key = {"PK": f"PROJECT#{item['project_id']}", "SK": "STATE"}
-        task_item = {key: self.serializer.serialize(value) for key, value in item.items()}
-        state_values = {":zero": self.serializer.serialize(0), ":one": self.serializer.serialize(1)}
-        state_names = {
-            "#total": "total_tasks",
-            "#completed": "completed_tasks",
-            "#in_progress": "in_progress_tasks",
-            "#blocked": "blocked_tasks",
-            "#entity": "entity_type",
-            "#project": "project_id",
+        task_item = {
+            key: self._to_dynamodb_value(value) for key, value in item.items()
         }
         try:
-            client.transact_write_items(
-                TransactItems=[
-                    {
-                        "Put": {
-                            "TableName": self.table.name,
-                            "Item": task_item,
-                            "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
-                        }
-                    },
-                    {
-                        "Update": {
-                            "TableName": self.table.name,
-                            "Key": {
-                                key: self.serializer.serialize(value)
-                                for key, value in state_key.items()
-                            },
-                            "UpdateExpression": (
-                                "SET #entity = if_not_exists(#entity, :state), "
-                                "#project = if_not_exists(#project, :project_id), "
-                                "#total = if_not_exists(#total, :zero) + :one, "
-                                "#completed = if_not_exists(#completed, :zero), "
-                                "#in_progress = if_not_exists(#in_progress, :zero), "
-                                "#blocked = if_not_exists(#blocked, :zero)"
-                            ),
-                            "ExpressionAttributeNames": state_names,
-                            "ExpressionAttributeValues": {
-                                **state_values,
-                                ":state": self.serializer.serialize("PROJECT_STATE"),
-                                ":project_id": self.serializer.serialize(item["project_id"]),
-                            },
-                            "ConditionExpression": (
-                                "attribute_not_exists(PK) OR "
-                                "#entity = :state"
-                            ),
-                        }
-                    },
-                ]
+            self.table.put_item(
+                Item=task_item,
+                ConditionExpression=(
+                    "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+                ),
             )
         except ClientError as error:
-            code = error.response["Error"]["Code"]
-            if code == "TransactionCanceledException":
-                reasons = error.response.get("CancellationReasons", [])
-                if reasons and reasons[0].get("Code") == "ConditionalCheckFailed":
-                    raise TaskAlreadyExistsError from error
+            if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise TaskAlreadyExistsError from error
             self._raise_for_client_error(error)
             raise
         return item
@@ -155,15 +110,24 @@ class TaskRepository:
         remove_fields = remove_fields or []
         if not fields and not remove_fields:
             return self.get(project_id, task_id)
+
         names = {
             f"#{field}": field for field in [*fields.keys(), *remove_fields]
         }
         clauses = []
-        values = {f":{field}": value for field, value in fields.items()}
+        values = {
+            f":{field}": self._to_dynamodb_value(value)
+            for field, value in fields.items()
+        }
         if fields:
-            clauses.append("SET " + ", ".join(f"#{field} = :{field}" for field in fields))
+            clauses.append(
+                "SET " + ", ".join(f"#{field} = :{field}" for field in fields)
+            )
         if remove_fields:
-            clauses.append("REMOVE " + ", ".join(f"#{field}" for field in remove_fields))
+            clauses.append(
+                "REMOVE " + ", ".join(f"#{field}" for field in remove_fields)
+            )
+
         parameters = {
             "Key": {"PK": f"PROJECT#{project_id}", "SK": f"TASK#{task_id}"},
             "UpdateExpression": " ".join(clauses),
@@ -173,6 +137,7 @@ class TaskRepository:
         }
         if values:
             parameters["ExpressionAttributeValues"] = values
+
         try:
             response = self.table.update_item(**parameters)
         except ClientError as error:
@@ -202,7 +167,9 @@ class TaskRepository:
             raise TaskRepositoryValidationError("Invalid next_token") from error
 
     def _query_page(self, limit: int, start_key: dict[str, Any] | None, **kwargs):
-        parameters = {key: value for key, value in kwargs.items() if value is not None}
+        parameters = {
+            key: value for key, value in kwargs.items() if value is not None
+        }
         parameters["Limit"] = limit
         if start_key:
             parameters["ExclusiveStartKey"] = start_key
@@ -221,6 +188,19 @@ class TaskRepository:
         for expression in filters[1:]:
             result = result & expression
         return result
+
+    @staticmethod
+    def _to_dynamodb_value(value: Any) -> Any:
+        if isinstance(value, float):
+            return Decimal(str(value))
+        if isinstance(value, list):
+            return [TaskRepository._to_dynamodb_value(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: TaskRepository._to_dynamodb_value(item)
+                for key, item in value.items()
+            }
+        return value
 
     @staticmethod
     def _raise_for_client_error(error: ClientError) -> None:

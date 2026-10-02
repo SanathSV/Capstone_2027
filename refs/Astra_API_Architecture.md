@@ -1,5 +1,13 @@
 # Astra API Architecture
 
+export AWS_PROFILE=astra-dev
+export AWS_REGION=ap-south-2
+
+export DYNAMODB_EMPLOYEES_TABLE=AstraEmployees
+export DYNAMODB_PROJECTS_TABLE=AstraProjects
+export DYNAMODB_MEMBERSHIPS_TABLE=AstraProjectMemberships
+export DYNAMODB_STATE_TABLE=AstraProjectState
+
 ## Purpose
 
 This API architecture is designed to work directly with the DynamoDB schema:
